@@ -42,3 +42,5 @@ for i in range(1,context_size+ 1):
     context = enc_sample[:i]
     target = enc_sample[i]
     print(f"prompt: {context} -> target: {target} , prompt: {tokenizer.decode(context)} -> target: {tokenizer.decode([target])}")
+
+
