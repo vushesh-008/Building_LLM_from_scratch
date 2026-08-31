@@ -1,0 +1,21 @@
+{
+  "dataset": "sample_sentences",
+  "description": "Sample sentences for LLM training pipeline practice",
+  "sentences": [
+    "the cat sat on the mat",
+    "the dog runs fast in the park",
+    "the bird flies high above the clouds",
+    "a quick brown fox jumps over the lazy dog",
+    "the cat and the dog are friends",
+    "the sun sets in the west every evening",
+    "she reads books by the window every morning",
+    "the train arrives late on rainy days",
+    "he writes code and drinks coffee all night",
+    "the moon rises slowly over the mountain",
+    "language models learn from large amounts of text",
+    "tokens are the basic units of text for a model",
+    "the model predicts the next word given context",
+    "attention helps the model focus on relevant words",
+    "embeddings map words into high dimensional vectors"
+  ]
+}
