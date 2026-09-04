@@ -11,6 +11,9 @@
 3. [Sharing Attention Heads — MHA, GQA, MQA](#3-sharing-attention-heads--mha-gqa-mqa)
 4. [PagedAttention — Managed Memory for KV Cache](#4-pagedattention--managed-memory-for-kv-cache)
 5. [Sparse Attention & Sliding Window Attention](#5-sparse-attention--sliding-window-attention)
+6. [FlashAttention — IO-Aware Exact Attention](#6-flashattention--io-aware-exact-attention)
+7. [Quantization for Inference](#7-quantization-for-inference)
+8. [Distributed Training & Numerical Precision](#8-distributed-training--numerical-precision)
 
 ---
 
@@ -527,3 +530,226 @@ Mix of global tokens (attend everywhere) and local tokens (attend within a windo
 - Typical window size: several thousand tokens
 - Global tokens: special positions like `[CLS]` or summary tokens that attend and are attended to by all positions
 - Used in Longformer, BigBird for document-length inputs
+
+---
+
+## 6. FlashAttention — IO-Aware Exact Attention
+
+Standard attention computes the correct result but does it in a way that is **bottlenecked by GPU memory bandwidth**, not compute. FlashAttention is a re-ordering of the same math that avoids writing the full $N \times N$ matrix to slow memory.
+
+### The memory hierarchy
+
+```
+  GPU compute (fast):  ──────────────────────── CUDA cores / Tensor cores
+  On-chip SRAM:        ──────── tiny (20–40 MB), extremely fast (~19 TB/s)
+  HBM (GPU RAM):       ──────── large (40–80 GB), much slower (~2 TB/s)
+  CPU RAM:             ──────── huge, very slow
+```
+
+Matrix multiplications run on CUDA cores and read from SRAM. But SRAM is tiny — most of the model's data lives in HBM. Every time data moves between HBM and SRAM, you pay a latency cost.
+
+### The standard attention IO problem
+
+```
+  Standard attention for sequence length N:
+
+  Step 1: load Q, K from HBM → compute S = QKᵀ         [N×N]  → write S to HBM
+  Step 2: load S from HBM → compute A = softmax(S)      [N×N]  → write A to HBM
+  Step 3: load A, V from HBM → compute O = AV           [N×d]  → write O to HBM
+
+  HBM reads/writes: O(N²)
+  For N=8192:  N² = 67M floats × 2 bytes = ~134 MB read+written per layer
+  At 2 TB/s: still takes meaningful time, repeated for every layer, every batch
+```
+
+The $N \times N$ attention matrix $S$ and $A$ are the problem — they are too large to fit in SRAM and must be round-tripped through slow HBM.
+
+### FlashAttention: tile and fuse
+
+Instead of materialising the full $N \times N$ matrix, FlashAttention **tiles** Q, K, V into blocks that fit in SRAM and computes the output incrementally:
+
+```
+  Split Q into blocks [Q₁, Q₂, ..., Qₜ]   (each block fits in SRAM)
+  Split K, V into blocks [K₁, K₂, ..., Kₜ]
+
+  For each query block Qᵢ:
+    For each key block Kⱼ:
+      Load Qᵢ, Kⱼ, Vⱼ into SRAM
+      Compute partial scores Sᵢⱼ = QᵢKⱼᵀ
+      Update running softmax denominator + output accumulator
+    Write output block Oᵢ back to HBM
+
+  The full N×N matrix is NEVER materialised — only small blocks pass through SRAM.
+```
+
+**Online softmax (the key trick):** softmax needs the full row to normalise, but FlashAttention uses a numerically stable running update — as each block of keys is processed, the running maximum and denominator are updated in place. The final output is identical to standard attention.
+
+| | Standard attention | FlashAttention |
+|---|---|---|
+| HBM reads/writes | $O(N^2)$ | $O(N)$ |
+| SRAM usage | $O(N^2)$ (can overflow) | $O(\text{block size})$ |
+| Result | Exact | **Exact** (no approximation) |
+| Memory footprint | $O(N^2)$ | $O(N)$ |
+| Speed (A100, N=2K) | baseline | ~3× faster |
+
+**FlashAttention-2** improved parallelism across query blocks and reduced non-matmul FLOPs.
+**FlashAttention-3** adds FP8 support and asynchronous pipelining for Hopper (H100) architecture.
+
+> FlashAttention is now the default in PyTorch (`F.scaled_dot_product_attention`), HuggingFace Transformers, and every major LLM training framework.
+
+---
+
+## 7. Quantization for Inference
+
+Quantization reduces the numerical precision of weights (and sometimes activations) to use less memory and run faster on integer hardware units.
+
+### Precision formats
+
+```
+  FP32:  32 bits  — 1 sign, 8 exponent, 23 mantissa  ← training default (old)
+  FP16:  16 bits  — 1 sign, 5 exponent, 10 mantissa  ← can underflow (small values → 0)
+  BF16:  16 bits  — 1 sign, 8 exponent, 7 mantissa   ← same range as FP32, less precision
+  INT8:   8 bits  — integer                           ← fast on tensor cores
+  FP8:    8 bits  — 1 sign, 4 or 5 exponent           ← Hopper/Blackwell native
+  INT4:   4 bits  — integer (weight-only typically)   ← ~4× memory reduction vs FP16
+```
+
+BF16 is preferred over FP16 for training because it has the same dynamic range as FP32 — no loss scaling tricks needed. FP8 is the modern training standard on H100/H200.
+
+### Weight-only quantization (AWQ / GPTQ)
+
+Compress weights to 4-bit integers while keeping activations in FP16. Matrix multiplications dequantize on the fly.
+
+**AWQ (Activation-aware Weight Quantization):**
+
+Not all weights are equally important. A small fraction of weights correspond to large-magnitude activations and cause large quantisation errors if truncated.
+
+```
+  Observation: for weight w_i, its quantisation error matters proportional
+  to the activation x_i that multiplies it.
+
+  Solution: scale important weights UP before quantising (they get more
+  precision), scale corresponding activations DOWN to compensate.
+  Net effect on output: unchanged. Quantisation error: reduced ~100×.
+```
+
+**GPTQ:** one-shot weight quantization using second-order information (Hessian) to find the quantization that minimizes output error per layer.
+
+Both enable running 70B models in ~40 GB GPU RAM (vs ~140 GB in FP16).
+
+### Weight + activation quantization (SmoothQuant)
+
+Quantizing activations to INT8 (not just weights) allows fully INT8 matrix multiplications — the fastest path on tensor cores.
+
+**Problem:** activation tensors in LLMs have extreme outliers (a few channels with values 100× larger than the rest). Quantizing these to INT8 causes catastrophic error.
+
+**SmoothQuant solution:** mathematically migrate the quantization difficulty from activations to weights:
+
+$$Y = X W = \underbrace{(X \cdot s^{-1})}_{\text{smooth activations}} \cdot \underbrace{(s \cdot W)}_{\text{absorb into weights}}$$
+
+- $s$ = per-channel scaling factor (large for outlier channels)
+- Activations are divided by $s$ → outliers tamed → safe to quantize to INT8
+- Weights are multiplied by $s$ → absorbed into weight matrix → quantised to INT8
+- At inference: pure INT8 matrix multiply, no dequantization overhead
+
+| Method | Weights | Activations | Memory saving | Use case |
+|---|---|---|---|---|
+| FP16 baseline | FP16 | FP16 | — | Training, highest quality |
+| AWQ / GPTQ | INT4 | FP16 | ~4× | Deployment on consumer GPUs |
+| SmoothQuant | INT8 | INT8 | ~2× | Fastest inference throughput |
+
+---
+
+## 8. Distributed Training & Numerical Precision
+
+Training large models requires distributing work across many GPUs. Three complementary strategies are used together.
+
+### Numerical precision at training scale
+
+**FP16 vs BF16:**
+
+```
+  FP16: exponent range ≈ 6×10⁻⁵ to 6.5×10⁴
+        Problem: gradients for deep models often fall below 6×10⁻⁵ → underflow → zero
+        Fix needed: loss scaling (multiply loss, scale gradients back) — fragile
+
+  BF16: exponent range = same as FP32 (1.2×10⁻³⁸ to 3.4×10³⁸)
+        Mantissa: only 7 bits (vs 23 for FP32) → less precision, but same range
+        No underflow problem → no loss scaling needed → simpler, stabler training
+```
+
+BF16 is the standard for all modern LLM training. FP8 (used in H100 training with Transformer Engine) halves memory again with minor quality trade-off.
+
+### Data Parallelism and ZeRO
+
+**Naive data parallelism:** each GPU holds a full copy of the model, processes a different batch, and gradients are averaged via all-reduce.
+
+**Problem:** a 70B model in BF16 = 140 GB weights + ~560 GB optimizer states (Adam stores momentum + variance per parameter in FP32) = ~700 GB total. A single H100 has 80 GB.
+
+**ZeRO (Zero Redundancy Optimizer)** partitions across $N$ GPUs:
+
+```
+  ZeRO-1:  Partition optimizer states only
+           Each GPU holds: full weights + full gradients + 1/N optimizer states
+           Memory saving: ~4× (optimizer states dominate)
+
+  ZeRO-2:  Partition optimizer states + gradients
+           Each GPU holds: full weights + 1/N gradients + 1/N optimizer states
+           Memory saving: ~8×
+
+  ZeRO-3 / FSDP:  Partition everything (weights + gradients + optimizer states)
+           Each GPU holds: 1/N of everything
+           Memory saving: ~N× (linear in GPU count)
+           Communication: gather weights before each forward pass layer
+```
+
+PyTorch's **FSDP (Fully Sharded Data Parallel)** is the standard ZeRO-3 implementation.
+
+### Tensor Parallelism (Megatron-LM style)
+
+ZeRO shards parameters across GPUs but each GPU still runs the full computation sequentially. Tensor Parallelism splits the **matrix multiply itself** across GPUs.
+
+For an MHA attention layer ($W_Q, W_K, W_V \in \mathbb{R}^{d \times d}$):
+
+```
+  Column-parallel (split W_Q, W_K, W_V across GPUs by columns):
+  GPU 1:  W_Q[:, :d/2]  →  heads 1..h/2
+  GPU 2:  W_Q[:, d/2:]  →  heads h/2+1..h
+
+  Each GPU computes its heads independently — no communication needed.
+
+  Row-parallel (output projection W_O, split by rows):
+  GPU 1:  W_O[:d/2, :]  (takes head 1..h/2 output)
+  GPU 2:  W_O[d/2:, :]  (takes head h/2+1..h output)
+
+  One all-reduce to sum the two partial outputs → final result.
+```
+
+Only **one all-reduce per transformer sublayer** (at the output projection). Computation is fully parallel otherwise.
+
+```
+  Tensor Parallelism degree 8 on a single 8-GPU node:
+  Each GPU holds 1/8 of each weight matrix.
+  NVLink bandwidth (600 GB/s) makes the all-reduce fast within a node.
+  → Used within a node; ZeRO/FSDP used across nodes.
+```
+
+### Pipeline Parallelism
+
+Split the **layers** of the model across GPUs — GPU 1 runs layers 1–10, GPU 2 runs layers 11–20, etc. Each GPU processes one micro-batch at a time and passes activations to the next GPU.
+
+```
+  GPU 1: layers 1–10   →  activations  →  GPU 2: layers 11–20  →  ...
+  Micro-batches fill the pipeline: while GPU 2 processes batch 1,
+  GPU 1 processes batch 2 — reducing idle "bubble" time.
+```
+
+### How the three strategies compose
+
+| Strategy | What is split | Communication | Typical use |
+|---|---|---|---|
+| Data Parallelism / FSDP | Parameters + optimizer states | All-reduce gradients | Across all GPUs |
+| Tensor Parallelism | Weight matrices (columns/rows) | All-reduce per sublayer | Within a node (fast interconnect) |
+| Pipeline Parallelism | Layers | Send activations between stages | Across nodes |
+
+For a 1000-GPU training run: tensor parallelism within each 8-GPU node, pipeline parallelism across nodes, FSDP/ZeRO for optimizer states.

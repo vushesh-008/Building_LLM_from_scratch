@@ -14,60 +14,81 @@
    - 3.2 [Denoising Autoencoder](#32-denoising-autoencoder)
    - 3.3 [Variational Autoencoder (VAE)](#33-variational-autoencoder-vae)
    - 3.4 [Masked Autoencoder (MAE)](#34-masked-autoencoder-mae)
+   - 3.5 [Diffusion Models — DDPM & DDIM](#35-diffusion-models--ddpm--ddim)
+   - 3.6 [Flow Matching](#36-flow-matching)
 4. [Contrastive Family — Learning by Comparing](#4-contrastive-family--learning-by-comparing)
    - 4.1 [Word2Vec — The Original Contrastive Idea](#41-word2vec--the-original-contrastive-idea)
    - 4.2 [Triplet Loss](#42-triplet-loss)
    - 4.3 [InfoNCE / SimCLR](#43-infonce--simclr)
    - 4.4 [CLIP](#44-clip)
    - 4.5 [SigLIP](#45-siglip)
-5. [Where the Other Files Fit](#5-where-the-other-files-fit)
+5. [Post-Training and Alignment](#5-post-training-and-alignment)
+   - 5.1 [Supervised Fine-Tuning (SFT)](#51-supervised-fine-tuning-sft)
+   - 5.2 [LoRA and QLoRA](#52-lora-and-qlora)
+   - 5.3 [RLHF — Reinforcement Learning from Human Feedback](#53-rlhf--reinforcement-learning-from-human-feedback)
+   - 5.4 [DPO — Direct Preference Optimisation](#54-dpo--direct-preference-optimisation)
+   - 5.5 [GRPO — Group Relative Policy Optimisation](#55-grpo--group-relative-policy-optimisation)
+6. [Where the Other Files Fit](#6-where-the-other-files-fit)
 
 ---
 
 ## 1. The Full Learning Map
 
 ```
-PHASE 0 — Bridge from RNN era
-  ├─ Seq2seq + Bahdanau attention      ← attention before transformers
-  └─ Why transformers replaced RNNs    ← parallelism, long-range gradients
+PHASE 0 — Bridge from RNN era                        ← THIS FILE §2
+  ├─ Seq2seq + Bahdanau attention
+  └─ Why transformers replaced RNNs
 
-PHASE 1 — Transformer mechanics        ← file 01
+PHASE 1 — Transformer mechanics                      ← file 01
   ├─ Token embeddings, QKV attention, scaling
   ├─ Multi-head attention, FFN, residuals, LayerNorm
   └─ Positional encodings: sinusoidal, ALiBi, RoPE
 
-PHASE 2 — Architectures               ← file 02
+PHASE 2 — Architectures & pre-training               ← file 02
   ├─ Encoder-decoder (original Transformer, T5)
   ├─ Decoder-only (GPT, LLaMA, Mistral)
   └─ Encoder-only (BERT) + MLM + NSP
 
-PHASE 3 — Reconstruction family        ← THIS FILE §3
+PHASE 3 — Reconstruction family                      ← THIS FILE §3
   ├─ Vanilla Autoencoder
   ├─ Denoising Autoencoder
-  ├─ VAE (Variational Autoencoder)
-  └─ MAE (Masked Autoencoder)          ← also in file 06
+  ├─ VAE (reparameterisation trick, ELBO)
+  ├─ MAE (Masked Autoencoder)                        ← also in file 06
+  ├─ DDPM / DDIM (Diffusion Models)
+  └─ Flow Matching (modern successor to diffusion)
 
-PHASE 4 — Contrastive family           ← THIS FILE §4
+PHASE 4 — Contrastive family                         ← THIS FILE §4
   ├─ Word2Vec / negative sampling
   ├─ Triplet loss
   ├─ InfoNCE / SimCLR
-  ├─ CLIP                              ← also in file 06
-  └─ SigLIP                            ← also in file 06
+  ├─ CLIP                                            ← also in file 06
+  └─ SigLIP                                          ← also in file 06
 
-PHASE 5 — Vision Transformers
-  ├─ ViT (patch tokenisation, CLS, classification)
-  └─ ViT pretraining (classification / CLIP / MAE) ← file 06 §1
+PHASE 5 — Post-training & alignment                  ← THIS FILE §5
+  ├─ Supervised Fine-Tuning (SFT) + chat templates
+  ├─ LoRA / QLoRA (parameter-efficient fine-tuning)
+  ├─ RLHF (reward model + PPO)
+  ├─ DPO (direct preference optimisation)
+  └─ GRPO (group relative, reasoning / test-time compute)
 
-PHASE 6 — Full stack
-  ├─ VLMs (ViT + adapter + LLM)        ← file 06
-  ├─ VLAs (VLM + action bins)          ← file 06
-  ├─ Decoding strategies               ← file 03
-  ├─ Inference optimisation            ← file 04
-  └─ Mixture of Experts                ← file 05
+PHASE 6 — Vision Transformers & multimodality        ← file 06
+  ├─ ViT (patch tokenisation, CLS, pretraining objectives)
+  ├─ VLMs (ViT + adapter + causal LLM)
+  └─ VLAs (action bins, 7-DOF, compounding error)
+
+PHASE 7 — Inference, hardware & systems              ← file 04
+  ├─ Decoding strategies                             ← file 03
+  ├─ KV cache, GQA/MQA, PagedAttention
+  ├─ FlashAttention v1/v2/v3 (SRAM tiling)
+  ├─ Quantization (AWQ, SmoothQuant)
+  ├─ Distributed training (ZeRO/FSDP, tensor parallelism)
+  ├─ Numerical precision (BF16, FP8)
+  ├─ Sparse / sliding-window attention
+  └─ Mixture of Experts                              ← file 05
 ```
 
 > **You already know:** RNN, LSTM, seq2seq basics.
-> **This file covers:** everything in Phase 0, 3, and 4 — the pieces that files 01–07 assume but don't explain.
+> **This file covers:** Phase 0, 3, 4, and 5 — the foundational pieces that files 01–07 assume but don't explain.
 
 ---
 
@@ -256,14 +277,110 @@ Denoising AE applied to image patches. Mask 75% of patches (the "corruption"), r
 
 ---
 
+### 3.5 Diffusion Models — DDPM & DDIM
+
+Diffusion extends the denoising AE idea across **many small corruption steps** rather than one big one. The model learns to reverse a gradual noising process.
+
+**Forward process — adding noise step by step:**
+
+$$q(x_t \mid x_{t-1}) = \mathcal{N}\!\left(x_t;\; \sqrt{1-\beta_t}\, x_{t-1},\; \beta_t I\right)$$
+
+Over $T$ steps (typically $T=1000$), a clean image $x_0$ is gradually turned into pure Gaussian noise $x_T \sim \mathcal{N}(0, I)$.
+
+```
+  x₀ (clean)  →  x₁ (tiny noise)  →  x₂  →  ...  →  xT (pure noise ≈ N(0,I))
+
+  Each step adds a small amount of Gaussian noise.
+  After T steps, the image is completely destroyed.
+```
+
+A useful shortcut: you can sample $x_t$ **directly** from $x_0$ without stepping through $t$ intermediate states:
+
+$$x_t = \sqrt{\bar{\alpha}_t}\, x_0 + \sqrt{1-\bar{\alpha}_t}\, \varepsilon \qquad \varepsilon \sim \mathcal{N}(0, I)$$
+
+where $\bar{\alpha}_t = \prod_{s=1}^{t}(1-\beta_s)$ is the cumulative noise schedule.
+
+**Reverse process — denoising:**
+
+A neural network (U-Net or Diffusion Transformer, DiT) is trained to predict the noise $\varepsilon$ that was added at each step:
+
+$$L = \mathbb{E}_{x_0, \varepsilon, t}\!\left[\|\varepsilon - \varepsilon_\theta(x_t, t)\|^2\right]$$
+
+At inference, start from $x_T \sim \mathcal{N}(0, I)$ and run the denoising network $T$ times to recover $x_0$.
+
+```
+  xT (noise)  →  xT₋₁  →  ...  →  x₁  →  x₀ (generated image)
+
+  Each step: predict the noise, subtract a fraction of it.
+  1000 steps at training → DDIM can do 50 steps at inference (deterministic).
+```
+
+**Classifier-Free Guidance (CFG):**
+
+Without guidance, diffusion generates random images. CFG steers generation toward a condition (text prompt, class label) by interpolating between conditional and unconditional predictions:
+
+$$\hat{\varepsilon} = \varepsilon_\theta(x_t, \varnothing) + w \cdot \left[\varepsilon_\theta(x_t, c) - \varepsilon_\theta(x_t, \varnothing)\right]$$
+
+- $c$ = condition (e.g. text embedding from CLIP)
+- $\varnothing$ = null condition (unconditional)
+- $w$ = guidance scale (typically 7–12): higher = more faithful to prompt but less diverse
+
+```
+  w = 1:   output = unconditional prediction (ignores prompt)
+  w = 7:   strong prompt following, slight quality gain
+  w = 20:  over-saturated, artefacts
+```
+
+**DDIM (Denoising Diffusion Implicit Models):**
+
+DDIM reformulates the reverse process as a **deterministic ODE** instead of a stochastic SDE. Same trained model, same math — but sampling becomes deterministic and you can skip steps:
+
+- DDPM: 1000 stochastic steps required
+- DDIM: 20–50 deterministic steps, nearly same quality
+
+---
+
+### 3.6 Flow Matching
+
+Flow Matching is the modern successor to diffusion (Flux, Stable Diffusion 3, and robot policy models like π₀ use it). The core idea is simpler: learn a **vector field** that transports noise to data along **straight paths** instead of the curved, step-by-step diffusion trajectory.
+
+```
+  Diffusion path (curved):          Flow Matching path (straight):
+  xT  ↘                             xT  ──────────────────────────►  x₀
+        ↘  ↘  ↘  ↘                        (one clean interpolation)
+                    ↘  x₀
+```
+
+**Training:**
+
+Pick a random $t \in [0,1]$. Interpolate between noise $x_1 \sim \mathcal{N}(0,I)$ and data $x_0$:
+
+$$x_t = (1-t)\, x_0 + t\, x_1$$
+
+The target vector field at this point is simply the direction from noise to data:
+
+$$u_t(x_t) = x_0 - x_1$$
+
+Train a network $v_\theta(x_t, t)$ to match this vector field:
+
+$$L = \mathbb{E}_{t, x_0, x_1}\!\left[\|v_\theta(x_t, t) - (x_0 - x_1)\|^2\right]$$
+
+**Inference:** start from noise $x_1$ and integrate the learned vector field with an ODE solver to reach $x_0$. Straight paths → fewer integration steps → faster sampling than diffusion.
+
+**Why it matters for robotics:** VLA policies (like π₀) use flow matching to output **continuous action trajectories** directly — no action binning, no quantisation error. The policy learns a vector field over action space rather than predicting discrete tokens.
+
+---
+
 ### Reconstruction family summary
 
-| Model | Input corruption | Loss | Latent space | Generative? |
-|---|---|---|---|---|
-| Vanilla AE | None | MSE | Unstructured | No |
-| Denoising AE | Noise / masking | MSE on clean | Unstructured | No |
-| VAE | None | ELBO (MSE + KL) | Gaussian, structured | **Yes** |
-| MAE | 75% patch masking | MSE on masked patches | Unstructured | No |
+| Model | Corruption | Loss | Latent | Generative? | Used for |
+|---|---|---|---|---|---|
+| Vanilla AE | None | MSE | Unstructured | No | Compression, anomaly detection |
+| Denoising AE | Noise / masking | MSE on clean | Unstructured | No | Representation learning |
+| VAE | None | ELBO (MSE + KL) | Gaussian | **Yes** | Generation, interpolation |
+| MAE | 75% patch masking | MSE on masked | Unstructured | No | ViT pre-training |
+| DDPM | Incremental Gaussian | MSE on noise $\varepsilon$ | Implicit | **Yes** | Image/video generation |
+| Flow Matching | Interpolation $(1-t)x_0+tx_1$ | MSE on vector field | Implicit | **Yes** | Fast generation, robot policies |
 
 ---
 
@@ -468,14 +585,199 @@ Each pair is treated as an independent binary classification: "do these match?" 
 
 ---
 
-## 5. Where the Other Files Fit
+## 5. Post-Training and Alignment
+
+Pre-training teaches a model to predict the next token. That alone produces a model that continues text — not one that follows instructions, reasons, or refuses harmful requests. Post-training is the pipeline that transforms a raw pretrained base into a usable assistant.
+
+```
+  Base model (pretrained)
+       │
+  SFT  ── teaches instruction following
+       │
+  RLHF / DPO / GRPO  ── aligns with human preferences, improves reasoning
+       │
+  Deployed assistant
+```
+
+---
+
+### 5.1 Supervised Fine-Tuning (SFT)
+
+The simplest step: fine-tune on a dataset of (prompt, response) pairs where responses are human-written or filtered to be high quality.
+
+```
+  Training example:
+  ┌──────────────────────────────────────────────────────┐
+  │ Prompt:   "Explain gradient descent in simple terms" │
+  │ Response: "Imagine you're lost in hilly terrain..."  │
+  └──────────────────────────────────────────────────────┘
+
+  Token sequence fed to the model:
+  [system] [prompt tokens] [response tokens]
+
+  Loss mask (same label=-100 trick as VLM):
+  [  -100 ] [    -100    ] [ CE loss here  ]
+                            ↑ only response tokens supervised
+```
+
+**Chat templates** define how the system/user/assistant turns are formatted. Each model family has its own format:
+
+```
+  LLaMA 3 chat template:
+  <|begin_of_text|>
+  <|start_header_id|>system<|end_header_id|>
+  You are a helpful assistant.<|eot_id|>
+  <|start_header_id|>user<|end_header_id|>
+  Explain gradient descent.<|eot_id|>
+  <|start_header_id|>assistant<|end_header_id|>
+  Imagine you're lost...
+```
+
+The model learns to predict only the assistant turns — the prompt and system message are context, not targets.
+
+---
+
+### 5.2 LoRA and QLoRA
+
+**The problem:** full fine-tuning updates all billions of parameters — expensive in GPU memory and compute, and risks catastrophic forgetting.
+
+**LoRA (Low-Rank Adaptation):** instead of updating the full weight matrix $W \in \mathbb{R}^{d \times k}$, add a low-rank correction:
+
+$$W' = W_0 + \Delta W = W_0 + B \cdot A$$
+
+where $B \in \mathbb{R}^{d \times r}$, $A \in \mathbb{R}^{r \times k}$, and rank $r \ll d$.
+
+```
+  d = 4096, k = 4096, r = 16:
+
+  Full fine-tuning:   4096 × 4096 = 16.7M parameters per matrix
+  LoRA:               4096×16 + 16×4096 = 131K parameters  ← 128× fewer
+```
+
+- $W_0$ is **frozen** — the original pretrained weights never change
+- Only $A$ and $B$ are trained (typically $<1\%$ of total parameters)
+- $A$ initialised randomly, $B$ initialised to zero → $\Delta W = 0$ at start (no disruption)
+- At inference: $W' = W_0 + BA$ is merged — zero runtime overhead
+
+LoRA is typically applied to the Q, K, V, and output projection matrices in attention.
+
+**QLoRA:** adds 4-bit quantisation of the frozen base model weights:
+
+| Component | QLoRA setting |
+|---|---|
+| Base model weights ($W_0$) | 4-bit NormalFloat (NF4) — quantised, frozen |
+| LoRA adapters ($A$, $B$) | BF16 — trained normally |
+| Optimizer states | Paged (offloaded to CPU RAM when GPU is tight) |
+
+NF4 is designed for normally-distributed weights (which pretrained LLM weights are) — it places quantisation levels at equal probability mass intervals, minimising error. QLoRA enables fine-tuning a 70B model on a single 48GB GPU.
+
+---
+
+### 5.3 RLHF — Reinforcement Learning from Human Feedback
+
+RLHF adds a **reward signal** on top of SFT — training the model to produce outputs that humans prefer, not just outputs that match a reference.
+
+**Two-stage process:**
+
+**Stage 1 — Train a reward model (RM):**
+
+```
+  Human annotators rank model outputs for the same prompt:
+  Prompt:    "Write a joke about cats"
+  Output A:  "Why do cats like computers? Because they have mice!" ← preferred
+  Output B:  "Cats are funny animals."                            ← not preferred
+
+  Reward model learns: RM(prompt, A) > RM(prompt, B)
+  Loss: -log σ(RM(prompt, preferred) - RM(prompt, rejected))
+```
+
+**Stage 2 — RL with PPO (Proximal Policy Optimisation):**
+
+```
+  Policy π_θ (the LLM being trained) generates a response y for prompt x.
+  Reward model scores it: r = RM(x, y)
+  KL penalty keeps policy close to the SFT reference model π_ref:
+
+  Objective = E[r(x,y)] - β · KL(π_θ || π_ref)
+```
+
+The KL penalty prevents the model from "gaming" the reward model by producing fluent but off-distribution text that happens to score well.
+
+---
+
+### 5.4 DPO — Direct Preference Optimisation
+
+RLHF requires training and running a separate reward model, which is complex and memory-intensive. DPO eliminates the reward model entirely — it derives the preference signal **directly from the policy's log-probabilities**.
+
+Given a dataset of (prompt, chosen response $y_w$, rejected response $y_l$) triples:
+
+$$\mathcal{L}_{\text{DPO}} = -\mathbb{E}\!\left[\log \sigma\!\left(\beta \log \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}\right)\right]$$
+
+- $\pi_\theta$ = model being trained
+- $\pi_{\text{ref}}$ = frozen SFT reference model (the before-alignment checkpoint)
+- $\beta$ = controls how far the model drifts from reference
+
+**What this does:** increase the relative probability of the chosen response and decrease the relative probability of the rejected one, compared to the reference. No separate reward model, no PPO rollouts — just a classification loss over preference pairs.
+
+```
+  DPO vs RLHF:
+  ┌───────────────┬──────────────────────┬──────────────────┐
+  │               │ RLHF (PPO)           │ DPO              │
+  ├───────────────┼──────────────────────┼──────────────────┤
+  │ Reward model  │ Trained separately   │ Not needed       │
+  │ Online rollout│ Yes (slow)           │ No (offline)     │
+  │ Stability     │ Tricky               │ Simpler          │
+  │ Quality       │ Slightly higher      │ Close            │
+  └───────────────┴──────────────────────┴──────────────────┘
+```
+
+---
+
+### 5.5 GRPO — Group Relative Policy Optimisation
+
+GRPO (popularised by DeepSeek-R1) is designed for **reasoning tasks** where responses can be verified — math problems, code, logical puzzles — and was key to scaling test-time compute.
+
+**Core idea:** instead of a learned reward model, sample $G$ responses for the same prompt, score each with a verifiable reward (e.g. does the code pass the test case?), and use the **group's mean and std as a normalisation baseline** rather than a learned value function.
+
+```
+  Prompt: "Solve: 3x + 7 = 22"
+
+  Sample G=8 responses:
+  y₁: x=5  ✓  reward=1
+  y₂: x=4  ✗  reward=0
+  y₃: x=5  ✓  reward=1
+  ...
+
+  Advantage for response i:
+  Aᵢ = (rᵢ - mean(r₁..rG)) / std(r₁..rG)   ← normalise within group
+
+  Policy gradient update: increase prob of high-advantage responses
+```
+
+**Why this matters:** no value function network needed (unlike PPO), no preference-pair dataset needed (unlike DPO). Just sample, score, and train. This enabled DeepSeek to train chain-of-thought reasoning with pure rule-based rewards (correct/incorrect) — no human annotation of reasoning steps.
+
+### Post-training summary
+
+| Method | Data needed | Reward model? | Key use case |
+|---|---|---|---|
+| SFT | (prompt, response) pairs | No | Instruction following |
+| LoRA / QLoRA | Same as SFT | No | Memory-efficient fine-tuning |
+| RLHF (PPO) | Human preference rankings | Yes (trained) | General alignment |
+| DPO | (prompt, chosen, rejected) | No (implicit) | Simpler alignment, offline |
+| GRPO | Prompts + verifiable rewards | No (rule-based) | Reasoning, math, code |
+
+---
+
+## 6. Where the Other Files Fit
 
 | File | What it covers | Prerequisites from this file |
 |---|---|---|
-| `01_Transformer_Core_Mechanics.md` | Attention, MHA, FFN, residuals, positional encodings | Phase 0 (RNN bridge) |
+| `01_Transformer_Core_Mechanics.md` | Attention, MHA, FFN, residuals, positional encodings | §2 (RNN bridge) |
 | `02_Architecture_and_Model_Families.md` | Encoder-decoder, decoder-only, BERT | File 01 |
 | `03_Decoding_and_Output_Generation.md` | Sampling, beam search, temperature | File 02 |
-| `04_Inference_and_Hardware_Optimization.md` | KV cache, GQA, PagedAttention, sparse attention | File 01 |
+| `04_Inference_and_Hardware_Optimization.md` | KV cache, GQA, PagedAttention, FlashAttention, quantization, distributed training | File 01 |
 | `05_Scaling_with_Mixture_of_Experts.md` | MoE routing, sparse activation | File 02 |
 | `06_Multimodality_VLMs_and_VLAs.md` | ViT, CLIP, MAE, VLM architecture, VLA | §3 (reconstruction) + §4 (contrastive) |
 | `07_Conceptual_QA_Bank.md` | Interview / exam questions | All files |
+
+> **Note:** Diffusion, Flow Matching (§3.5–3.6) and Post-Training (§5) are covered in depth here. Dedicated files for these will be added as the notes expand.
