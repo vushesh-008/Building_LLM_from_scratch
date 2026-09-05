@@ -1,6 +1,6 @@
 # Questions & Answers
 
-> Covers material from files 01–05. Questions test *why* decisions were made, not just definitions.
+> Covers material from all transformer curriculum phases. Questions test *why* decisions were made, not just definitions.
 
 ---
 
