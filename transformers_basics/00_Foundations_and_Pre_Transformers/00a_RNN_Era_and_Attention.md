@@ -32,7 +32,7 @@ $$h_t = \tanh(W_{hh} \cdot h_{t-1} + W_{xh} \cdot x_t + b)$$
 | $\tanh$ | — | Squashes values to $[-1, 1]$ |
 
 > [!NOTE]
-> **The same weight matrices $W_{xh}$ and $W_{hh}$ are reused at every timestep.** The RNN doesn't have different parameters for position 1 vs position 100 — it's one shared function applied repeatedly. This is why it can handle sequences of any length.
+> **Parameters are shared across all timesteps:** The weight matrices $W_{xh}$, $W_{hh}$, and bias vector $b$ are initialized once at model creation and reused identically for every token in the sequence. The bias $b$ is *not* re-randomized per word. This weight sharing is why the network can process sequences of arbitrary length without growing its parameter count.
 
 ### Step-by-Step: Processing "The cat sat"
 
@@ -69,8 +69,8 @@ flowchart LR
     x3["x₃\n(sat)"] --> RNN3["RNN cell\n tanh(W·[h,x]+b)"]
     RNN3 --> h3(["h₃\n final state"])
 
-    style h0 fill:#f5f5f5,stroke:#999
-    style h3 fill:#d9ead3,stroke:#38761d
+    style h0 fill:#f3f4f6,stroke:#9ca3af,stroke-width:1.5px,color:#111827
+    style h3 fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
 ```
 
 ### Unrolled View — The Same Cell, Three Times
@@ -107,6 +107,16 @@ Depending on the task, you read off different things:
 | Sequence classification (sentiment) | Final $h_T$ only → linear classifier |
 | Language modelling (next word) | Every $h_t$ → linear layer → softmax over vocab |
 | Sequence-to-sequence (translation) | All $h_t$ as encoder memory → decoder RNN |
+
+### Training: Backpropagation Through Time (BPTT)
+
+How often are weights updated? **Not word-by-word.** Training follows three distinct phases:
+
+1. **Full Forward Pass:** The model processes the whole sequence $x_1 \to x_T$, keeping intermediate activations $\{h_1, \dots, h_T\}$ in memory and calculating the sequence loss $\mathcal{L}$.
+2. **Backward Pass (Unrolling in Reverse):** Gradients flow backward through time from token $T \to 1$.
+3. **Gradient Accumulation & Optimizer Step:** Because $W_{hh}, W_{xh}$, and $b$ are reused at every step, their total gradient is the **sum** of contributions across all timesteps:
+   $$\frac{\partial \mathcal{L}}{\partial W_{hh}} = \sum_{t=1}^{T} \frac{\partial \mathcal{L}_t}{\partial W_{hh}}$$
+   The optimizer (e.g. Adam or SGD) updates parameters **once per sequence or batch**, after all timesteps have contributed their gradients.
 
 ---
 
@@ -171,7 +181,9 @@ The recurrence is a **hard dependency chain**: you cannot compute $h_t$ until $h
 Step 1 → Step 2 → Step 3 → ... → Step N     (must be serial)
 ```
 
-On a GPU with thousands of cores, you are using **one core at a time** for each sequence. Training on long sequences is brutally slow. This is the killer problem at scale — even if vanishing gradients were fixed, the sequential nature makes RNNs unscalable.
+On a GPU with thousands of cores, you are using **one core at a time** for each sequence:
+- **Can we optimize this?** We can parallelize across the *batch dimension* (processing many sentences simultaneously), but *within* any given sentence, token $t$ is strictly blocked on token $t-1$. No compiler or GPU kernel can bypass this hard serial dependency.
+- Training on long sequences is brutally slow. This is the killer problem at scale — even if vanishing gradients were fixed, the sequential nature makes RNNs unscalable.
 
 ---
 
@@ -249,8 +261,8 @@ flowchart LR
     tanh_c --> out_mul
     out_mul --> ht["h_t\n(hidden state out)"]
 
-    style ct fill:#fff3cd,stroke:#f0ad4e
-    style ht fill:#d9ead3,stroke:#38761d
+    style ct fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+    style ht fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
 ```
 
 ### Why the Cell State Fixes Vanishing Gradients
@@ -310,7 +322,7 @@ flowchart LR
     cand --> interp
     interp --> ht["h_t\n(new state)"]
 
-    style ht fill:#d9ead3,stroke:#38761d
+    style ht fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
 ```
 
 ### GRU vs LSTM — When to Use Which
@@ -437,8 +449,8 @@ flowchart TD
         RNN_D --> s_next(("s_t\nNew State"))
     end
     
-    style soft fill:#e6f3ff,stroke:#0066cc
-    style c fill:#d9ead3,stroke:#38761d
+    style soft fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    style c fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
 ```
 
 **The Math at Step $t$:**
