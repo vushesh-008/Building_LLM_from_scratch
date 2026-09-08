@@ -1,118 +1,253 @@
 # Reconstruction Family — Learning by Rebuilding
 
-**Core idea across all variants:** train a model to reconstruct its input (or a clean version of it). The bottleneck forces the model to learn a compressed, useful representation.
+Before Transformers took over modern AI, researchers discovered the most powerful paradigm in deep learning: **Self-Supervised Learning (SSL)**. Instead of paying humans to annotate millions of labels ($x \to y$), we make the **raw data supervise itself** ($x \to x$ or $\tilde{x} \to x$).
 
-```
-  Input x  ──►  Encoder  ──►  Bottleneck z  ──►  Decoder  ──►  x̂  ──►  Loss(x, x̂)
-```
+The **Reconstruction Family** is the foundational pillar of this paradigm. By forcing a model to compress, clean, or reconstruct data through an information bottleneck, the model is compelled to discover the underlying laws of the data — whether those are grammar rules in language, anatomy in images, or phonetics in audio.
 
 ---
 
-## Vanilla Autoencoder
+## The Big Picture: Why Reconstruction Matters for LLMs & Transformers
 
-The simplest form. Compress input to a lower-dimensional latent code $z$, then reconstruct.
+If you are building LLMs, you might ask: *"Why are Autoencoders in an LLM curriculum?"*
+
+Because modern foundation models are direct descendants of this family:
+* **BERT & RoBERTa:** Literally **Masked Denoising Autoencoders for text**. They hide 15% of the words and train a Transformer to reconstruct them.
+* **Vision Transformers (MAE):** State-of-the-art vision models train by masking 75% of image patches and reconstructing pixels.
+* **Multimodal LLMs & Diffusion:** Models like LLaMA-Vision, Chameleon, and Stable Diffusion rely on **VAEs and VQ-VAEs** to compress high-resolution images into compact discrete tokens that an LLM can understand.
+
+### Cross-Modality Mapping: Reconstruction Across Data Types
+
+Reconstruction uses the same principle regardless of whether data is pixels, words, or audio:
+
+| Modality | Raw Input $x$ | Bottleneck / Corruption | Reconstruction Target $\hat{x}$ | Landmark Model |
+| :--- | :--- | :--- | :--- | :--- |
+| **Vision (Pixels)** | $28 \times 28$ image (784 numbers) | Low-dim code $z \in \mathbb{R}^{32}$ | Original clean image | **Vanilla AE / VAE** |
+| **Vision (Patches)** | $224 \times 224$ image ($196$ patches) | Mask 75% of image patches | Missing pixel values | **MAE (He et al., 2021)** |
+| **Language (Tokens)** | Sequence of word embeddings | Replace 15% tokens with `[MASK]` | Original missing words | **BERT (Devlin et al., 2018)** |
+| **Audio (Frames)** | Spectrogram / Raw audio wave | Mask blocks of time frames | Reconstructed acoustic frames | **Wav2Vec 2.0 / HuBERT** |
+| **Discrete Latents** | Continuous image / video | Quantize vectors to codebook indices | Decoded high-res image | **VQ-VAE / VQGAN** |
+
+---
+
+## §1 — Vanilla Autoencoder (AE): Compression & Representation
+
+The simplest formulation. Map high-dimensional input $x$ to a lower-dimensional latent space $z$ (the **bottleneck**), then reconstruct $\hat{x}$.
 
 ```mermaid
 flowchart LR
-    X["Input x\n[784]"] --> ENC["Encoder\n784→128→32"] --> Z["Latent z\n[32]"] --> DEC["Decoder\n32→128→784"] --> XH["Reconstructed x̂\n[784]"]
-    XH --> LOSS["MSE Loss\n||x - x̂||²"]
+    X["Input x\n(e.g., MNIST image\n28×28 = 784 pixels)"] --> ENC["Encoder Network\n784 → 128 → 32"]
+    ENC --> Z["Latent Bottleneck z\n[32 numbers]"]
+    Z --> DEC["Decoder Network\n32 → 128 → 784"]
+    DEC --> XH["Reconstructed x̂\n[784 pixels]"]
+    
+    XH -.-> LOSS["MSE Reconstruction Loss\nL = ||x - x̂||²"]
+    X -.-> LOSS
+
+    style X fill:#f3f4f6,stroke:#9ca3af,stroke-width:1.5px,color:#111827
+    style ENC fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style Z fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    style DEC fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style XH fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+    style LOSS fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#991b1b
 ```
 
-$$L = \|x - \hat{x}\|^2$$
+### The Loss Function
+$$L(x, \hat{x}) = \|x - \hat{x}\|^2 = \sum_{i=1}^{D} (x_i - \hat{x}_i)^2$$
 
-**Why this works:** to reconstruct well, $z$ must capture the most important structure of $x$. Random noise, redundant pixels — these can't be encoded in 32 dims and get discarded. What survives is signal.
+### Why Does the Bottleneck Force Learning?
+If the network had unlimited dimensions at the bottleneck ($z$ had 784 dims), it would learn the **identity function** — simply copying pixel 1 to output 1 without understanding anything.
 
-**What $z$ learns:**
-- For faces: $z$ dimensions capture things like "face angle", "lighting", "smile intensity" — not explicitly, but as emergent structure needed for reconstruction
-- Similar inputs end up near each other in $z$-space
+By squeezing 784 dimensions down to just **32 numbers**:
+* The network **cannot memorize** individual pixels or random background noise.
+* It is forced to discover **global semantic factors** (e.g., digit angle, loop closure, stroke thickness).
+* Think of it as **Non-linear Principal Component Analysis (PCA)**.
 
-**Limitations:**
-- $z$-space is not structured — there are gaps between clusters; sampling a random $z$ often produces garbage
-- No way to generate new examples (not generative)
+### What $z$ Actually Learns
+* **Clustering:** Similar digits or faces naturally cluster close together in $z$-space.
+* **Semantic Axes:** In face models, specific axes in $z$ emerge corresponding to "lighting direction," "smile intensity," or "pose angle" — without any human ever providing those labels.
+
+### The Fatal Flaws of Vanilla Autoencoders
+1. **Unstructured Latent Space ("Swiss Cheese"):** The network only cares about minimizing error for training points. The space between clusters is completely undefined.
+2. **Cannot Generate New Data:** If you pick a random coordinate $z \sim \mathcal{N}(0, 1)$ in empty space and feed it to the decoder, you get nonsensical static or hybrid blur. It is a compression model, **not a generative model**.
 
 ---
 
-## Denoising Autoencoder
+## §2 — Denoising Autoencoder (DAE): Learning Robust Representations
 
-Corrupt the input, train the model to reconstruct the **clean original**:
-
-```
-  Clean x  ──► corrupt  ──►  x̃  ──►  Encoder  ──►  z  ──►  Decoder  ──►  x̂
-
-  Corruption types:
-    - Gaussian noise:  x̃ = x + ε,   ε ~ N(0, σ²)
-    - Masking:         x̃ = x with 30% of values set to 0
-    - Salt & pepper:   x̃ = x with random pixels set to 0 or 1
-
-  Loss:  ||x - x̂||²   (against the CLEAN x, not the corrupted x̃)
-```
-
-**Why this is better:** predicting the clean image from a corrupt one forces the model to understand the underlying data distribution — not just memorise. The model must learn what a "face" looks like to fill in masked pixels correctly. This is the conceptual parent of MAE and BERT's MLM.
-
----
-
-## Variational Autoencoder (VAE)
-
-The key upgrade: instead of encoding $x$ to a **point** $z$, encode it to a **distribution** $q(z|x) = \mathcal{N}(\mu, \sigma^2)$.
+Introduced by Vincent et al. (2008), the Denoising Autoencoder changed the goal: **Do not reconstruct the input you received. Reconstruct the clean version of a corrupted input.**
 
 ```mermaid
 flowchart LR
-    X["Input x"] --> ENC["Encoder"]
-    ENC --> MU["μ  (mean)"]
-    ENC --> SIG["σ  (std dev)"]
-    MU --> SAMP["z = μ + ε·σ\nε ~ N(0,1)\nReparameterisation trick"]
-    SIG --> SAMP
-    SAMP --> DEC["Decoder"] --> XH["x̂"]
-    XH --> LOSS["ELBO Loss"]
+    X["Clean Input x"] --> NOISE["Apply Corruption\n(Noise / Masking)"]
+    NOISE --> XT["Corrupted x̃"]
+    XT --> ENC["Encoder"]
+    ENC --> Z["Bottleneck z"]
+    Z --> DEC["Decoder"]
+    DEC --> XH["Reconstruction x̂"]
+    
+    X -.-> LOSS["Loss = ||x - x̂||²\n(Target is CLEAN x!)"]
+    XH -.-> LOSS
+
+    style X fill:#f3f4f6,stroke:#9ca3af,stroke-width:1.5px,color:#111827
+    style NOISE fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#991b1b
+    style XT fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#9a3412
+    style ENC fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style Z fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    style DEC fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style XH fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+    style LOSS fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#991b1b
 ```
 
-**The reparameterisation trick:** sampling is not differentiable — you can't backprop through a random draw. The trick rewrites the sample as:
+### Common Corruption Strategies
+1. **Additive Gaussian Noise:** $\tilde{x} = x + \epsilon, \quad \epsilon \sim \mathcal{N}(0, \sigma^2)$
+2. **Masking Noise (Zero-out):** Randomly set 20–50% of input elements to 0.
+3. **Salt-and-Pepper Noise:** Randomly flip pixels to pure min/max.
 
-$$z = \mu + \varepsilon \cdot \sigma \qquad \varepsilon \sim \mathcal{N}(0, 1)$$
+### Why DAE Forces True Understanding
+If an eye is masked out of a face image, the model cannot copy it. To reconstruct the missing eye, the network **must know what a human face looks like**, that faces are symmetric, and where an eye belongs relative to the nose.
 
-Now $\varepsilon$ is the random part (no gradient needed through it), and $\mu, \sigma$ are deterministic outputs of the encoder — fully differentiable.
-
-**Loss — ELBO (Evidence Lower BOund):**
-
-$$\mathcal{L} = \underbrace{\mathbb{E}[\log p(x|z)]}_{\text{reconstruction term}} - \underbrace{D_{KL}(q(z|x) \| p(z))}_{\text{regularisation term}}$$
-
-| Term | What it does |
-|---|---|
-| Reconstruction $\mathbb{E}[\log p(x\|z)]$ | Decoder must reconstruct $x$ from $z$ — same as AE |
-| KL divergence $D_{KL}$ | Forces $q(z\|x)$ to stay close to $\mathcal{N}(0,1)$ — regularises latent space |
-
-**What KL regularisation gives you:**
-```
-  Vanilla AE latent space:      VAE latent space:
-  ●●        ●●●                 ·  ·  ·  ·  ·  ·
-      gap                       ·  ●  ●  ·  ●  ·
-  ●●●●   ●●                    ·  ●  ●  ·  ●  ·
-                                ·  ·  ·  ·  ·  ·
-
-  Gaps → sampling breaks        Smooth, continuous → sampling works
-```
-
-Because the latent space is regularised to $\mathcal{N}(0,1)$, you can **sample a random $z \sim \mathcal{N}(0,1)$, run the decoder, and get a plausible new example** — the VAE becomes a generative model.
+> [!IMPORTANT]
+> **The Direct Line to BERT:** 
+> When BERT masks 15% of words in a sentence (`"The [MASK] sat on the mat"`) and predicts `"cat"`, **BERT is operating as a Denoising Autoencoder for discrete language tokens**.
 
 ---
 
-## Masked Autoencoder (MAE)
+## §3 — Variational Autoencoder (VAE): Making the Latent Space Generative
 
-Denoising AE applied to image patches. Mask 75% of patches (the "corruption"), reconstruct the missing pixel values.
+Published by Kingma & Welling (2013), the VAE transformed autoencoders into true **generative models**. 
+
+Instead of encoding an input $x$ to a single deterministic point $z$, the encoder predicts the parameters of a probability distribution: **mean vector $\mu$** and **log-variance vector $\log \sigma^2$**.
+
+```mermaid
+flowchart LR
+    X["Input x"] --> ENC["Encoder Network"]
+    ENC --> MU["Mean μ"]
+    ENC --> LOGVAR["Log Variance log(σ²)"]
+    
+    MU --> REPARAM["Reparameterization Trick\nz = μ + ε ⊙ σ\nwhere ε ~ N(0, I)"]
+    LOGVAR --> REPARAM
+    EPS["Random Noise ε\n~ N(0, I)"] --> REPARAM
+    
+    REPARAM --> Z["Sampled Latent z"]
+    Z --> DEC["Decoder Network"]
+    DEC --> XH["Reconstructed x̂"]
+
+    style X fill:#f3f4f6,stroke:#9ca3af,stroke-width:1.5px,color:#111827
+    style ENC fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style MU fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#3730a3
+    style LOGVAR fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#3730a3
+    style EPS fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+    style REPARAM fill:#ffedd5,stroke:#ea580c,stroke-width:2px,color:#9a3412
+    style Z fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    style DEC fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style XH fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+```
+
+### The Reparameterization Trick: Why Sampling Didn't Break Backpropagation
+
+In a naive formulation, you would sample $z \sim \mathcal{N}(\mu, \sigma^2)$. But **sampling is a stochastic operation**: you cannot compute a mathematical derivative through a random number generator! Backpropagation would die at the sampling node.
+
+The solution is the **Reparameterization Trick**:
+Separate the randomness from the learned parameters:
+
+$$z = \mu + \sigma \odot \varepsilon, \quad \text{where } \varepsilon \sim \mathcal{N}(0, I)$$
+
+* $\varepsilon$ is drawn from a standard normal distribution with no trainable parameters.
+* $\mu$ and $\sigma$ remain deterministic outputs of neural network layers.
+* Gradients flow seamlessly through $\mu$ and $\sigma$ back into the encoder!
+
+### The Loss Function: Evidence Lower Bound (ELBO)
+
+$$\mathcal{L}_{\text{VAE}} = \underbrace{\mathbb{E}_{q(z|x)}[\log p(x|z)]}_{\text{Reconstruction Fidelity (MSE or BCE)}} - \underbrace{D_{\text{KL}}\left(q(z|x) \parallel \mathcal{N}(0, I)\right)}_{\text{KL Divergence Regularizer}}$$
+
+| Term | Mathematical Goal | Physical Interpretation |
+| :--- | :--- | :--- |
+| **Reconstruction Term** | Maximize log-likelihood $\log p(x\|z)$ | "Make $\hat{x}$ look identical to input $x$." |
+| **KL Divergence Term** | Minimize distance to $\mathcal{N}(0, I)$ | "Keep all cluster centers near 0 and variance near 1. Fill all empty holes." |
+
+### Why KL Regularization Creates a Generative Latent Space
 
 ```
-  Input image (196 patches):
-  ┌────┬────┬────┬────┐
-  │ p₁ │ ██ │ p₃ │ ██ │   ← ██ = masked (75% of patches)
-  ├────┼────┼────┼────┤
-  │ ██ │ p₆ │ ██ │ p₈ │
-  └────┴────┴────┴────┘
-
-  ViT encoder sees only the 25% visible patches.
-  Lightweight decoder reconstructs masked patches' pixel values.
-  Loss: MSE on masked patches only.
+  Vanilla AE (No Regularization):          VAE (With KL Regularization):
+  
+      Digit 1           Digit 2               Digit 1      Digit 2
+       ● ● ●             ▲ ▲ ▲                 ● ● ●        ▲ ▲ ▲
+       ● ● ●             ▲ ▲ ▲                 ● ● ● ──*─── ▲ ▲ ▲
+                                                       │
+           [DEAD SPACE / GAPS]                 Interpolation works!
+       Sampling here = GARBAGE                 Sampling here = Smooth hybrid digit
+       
+       ■ ■ ■                                        ■ ■ ■
+      Digit 3                                      Digit 3
 ```
 
-75% masking is intentionally high — with 25% visible, the model cannot just copy local context. It must understand the global image structure (what a dog's leg typically looks like given its body). This forces rich semantic representations.
+Because the KL term pulls all encodings toward a standard normal Gaussian $\mathcal{N}(0, I)$:
+1. **Completeness:** There are no dead spaces or missing gaps.
+2. **Smoothness:** Walking from one point in $z$-space to another smoothly transitions the output (e.g., smoothly turning a frowning face into a smiling face).
+3. **Generation:** You can draw a random vector $z \sim \mathcal{N}(0, I)$, pass it through the decoder, and generate a brand-new, realistic image!
 
 ---
+
+## §4 — Masked Autoencoders (MAE): Reconstruction at Foundation Scale
+
+Published by Kaiming He et al. (2021), **Masked Autoencoders (MAE)** proved that denoising reconstruction scales brilliantly to massive Vision Transformers (ViT).
+
+```mermaid
+flowchart TD
+    IMG["Full Image\n(e.g., 224×224)"] --> PATCH["Divide into 196 Patches\n(16×16 each)"]
+    PATCH --> MASK["Random Masking: 75%\n(Remove 147 patches, keep 49)"]
+    
+    MASK --> VIS["49 Visible Patches Only"]
+    VIS --> VIT_ENC["Heavy ViT Encoder\n(Processes ONLY 25% of tokens)"]
+    VIT_ENC --> LAT["Latent Representations"]
+    
+    LAT --> COMBINE["Add [MASK] Tokens back for\nthe 147 missing locations"]
+    COMBINE --> VIT_DEC["Lightweight ViT Decoder\n(Reconstructs missing pixel values)"]
+    VIT_DEC --> OUT["Reconstructed Image Patches"]
+    
+    OUT -.-> LOSS["MSE Loss on MASKED patches only"]
+
+    style IMG fill:#f3f4f6,stroke:#9ca3af,stroke-width:1.5px,color:#111827
+    style PATCH fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#3730a3
+    style MASK fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#991b1b
+    style VIS fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#9a3412
+    style VIT_ENC fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    style LAT fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+    style COMBINE fill:#f3f4f6,stroke:#9ca3af,stroke-width:1.5px,color:#111827
+    style VIT_DEC fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+    style OUT fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+    style LOSS fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#991b1b
+```
+
+### Why 75% Masking for Vision vs 15% for Language?
+* **Language is dense and symbolic:** If you remove 50% of the words from a paragraph, humans cannot decipher the meaning. Every word contains high semantic entropy. Hence BERT only masks **15%**.
+* **Vision is spatially redundant:** Pixels next to each other are almost identical. If you mask 15% of an image, the model just copies neighboring pixel values without learning semantics. Masking **75% to 80%** forces the model to understand high-level concepts (e.g., predicting an entire airplane wing from just a tip).
+
+### The Asymmetric Compute Advantage
+Notice a brilliant architectural trick in MAE:
+1. The **Encoder is large and deep**, but it **only processes the 25% visible patches**. Because Transformer complexity is quadratic with sequence length ($O(N^2)$), running on 25% of tokens speeds up training by over **3× to 4×**!
+2. The **Decoder is tiny and shallow**, used only during pretraining to reconstruct pixels, and discarded during downstream fine-tuning.
+
+---
+
+## §5 — Summary: The Complete Reconstruction Family
+
+| Model | Primary Modality | Bottleneck / Constraint | Objective | Core Superpower | Primary Limitation |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Vanilla AE** | Any (Pixels, features) | Low dimensionality ($z \ll x$) | Minimize $\|x - \hat{x}\|^2$ | Non-linear dimensionality reduction | Gaps in latent space; non-generative |
+| **Denoising AE** | Images, Tabular | Noise / zero-out corruption | Predict clean $x$ from noisy $\tilde{x}$ | Learns robust manifold structure | Reconstruction targets can be blurry |
+| **VAE** | Images, Audio, Latents | KL Divergence constraint to $\mathcal{N}(0, I)$ | ELBO (Reconstruction + KL) | Smooth, continuous generative space | Blurry image outputs compared to GANs/Diffusion |
+| **VQ-VAE** | Images, Audio, Video | Discrete vector codebook ($e_k$) | Vector quantization + reconstruction | Converts continuous signals into discrete tokens for LLMs | Training codebook requires EMA or commitment loss |
+| **BERT (MLM)** | Natural Language | 15% Token Masking (`[MASK]`) | Cross-Entropy over vocabulary | Deep bidirectional language representations | Cannot generate autoregressive text naturally |
+| **MAE** | Vision Patches | 75% Patch Masking | Pixel MSE on masked patches | Extremely scalable pretraining for ViT encoders | Specialized for encoder representations |
+
+---
+
+## Landmark Papers to Know
+
+1. **Autoencoders & Dimensionality Reduction:** [Hinton & Salakhutdinov (2006) — *Reducing the Dimensionality of Data with Neural Networks*](https://www.science.org/doi/10.1126/science.1127647)
+2. **Denoising Autoencoders:** [Vincent et al. (2008) — *Extracting and Composing Robust Features with Denoising Autoencoders*](https://dl.acm.org/doi/10.1145/1390156.1390294)
+3. **Variational Autoencoders:** [Kingma & Welling (2013) — *Auto-Encoding Variational Bayes*](https://arxiv.org/abs/1312.6114)
+4. **Vector-Quantized VAE (VQ-VAE):** [van den Oord et al. (2017) — *Neural Discrete Representation Learning*](https://arxiv.org/abs/1711.00937)
+5. **BERT:** [Devlin et al. (2018) — *BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding*](https://arxiv.org/abs/1810.04805)
+6. **Masked Autoencoders (MAE):** [He et al. (2021) — *Masked Autoencoders Are Scalable Vision Learners*](https://arxiv.org/abs/2111.06377)
