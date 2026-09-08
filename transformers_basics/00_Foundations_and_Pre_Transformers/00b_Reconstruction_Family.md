@@ -51,8 +51,74 @@ flowchart LR
     style LOSS fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#991b1b
 ```
 
-### The Loss Function
-$$L(x, \hat{x}) = \|x - \hat{x}\|^2 = \sum_{i=1}^{D} (x_i - \hat{x}_i)^2$$
+### Architecture Internals: How Dimension is Natively Reduced
+
+How does the network physically squeeze 784 numbers down into 32? **Through rectangular weight matrices.**
+
+```
+Input Image (28×28) ──► Flatten ──► Linear(784, 128) ──► ReLU ──► Linear(128, 32) ──► Latent Code z (32 dims)
+```
+
+1. **The Encoder:**
+   * **Layer 1:** Input $\mathbf{x} \in \mathbb{R}^{1 \times 784}$ is multiplied by weight matrix $\mathbf{W}_1 \in \mathbb{R}^{784 \times 128}$.
+     $$\mathbf{h}_1 = \text{ReLU}(\mathbf{x} \mathbf{W}_1 + \mathbf{b}_1) \implies \text{Shape: } [1 \times 128]$$
+   * **Layer 2 (Bottleneck):** $\mathbf{h}_1$ is multiplied by $\mathbf{W}_2 \in \mathbb{R}^{128 \times 32}$.
+     $$\mathbf{z} = \mathbf{h}_1 \mathbf{W}_2 + \mathbf{b}_2 \implies \text{Shape: } [1 \times 32]$$
+   * The dimensional collapse happens purely because $\mathbf{W}_1$ and $\mathbf{W}_2$ have fewer output columns than input rows.
+   *(In a **Convolutional Autoencoder**, dimension reduction is achieved using **Strided Convolutions** (`stride=2`) or **Max Pooling** layers, which downsample the 2D spatial grid: $28 \times 28 \to 14 \times 14 \to 7 \times 7 \to \text{flatten}$).*
+
+2. **The Decoder (Symmetrical Expansion):**
+   * **Layer 1:** Latent $\mathbf{z} \in \mathbb{R}^{1 \times 32}$ multiplied by $\mathbf{W}_3 \in \mathbb{R}^{32 \times 128} \implies [1 \times 128]$.
+   * **Layer 2:** Hidden state multiplied by $\mathbf{W}_4 \in \mathbb{R}^{128 \times 784} \implies [1 \times 784]$.
+   * **Output Activation (`Sigmoid`):** Squashes all 784 output values into the range $[0.0, 1.0]$, matching valid normalized pixel intensities!
+
+---
+
+### How Loss is Computed on Pixels (Step-by-Step with a Small Image)
+
+In language models, words are discrete IDs; the model produces a softmax probability distribution over 50,000 vocabulary tokens and minimizes **Categorical Cross-Entropy**.
+
+In image autoencoders, **pixels are continuous real numbers**. We compare the predicted intensity directly against the true pixel intensity using regression.
+
+#### Concrete Walkthrough: A Tiny $2 \times 2$ Image (4 Pixels)
+Suppose we feed a tiny $2 \times 2$ grayscale patch into our autoencoder. Pixels are normalized from $[0, 255]$ to $[0.0, 1.0]$:
+
+```
+  Original Image x (2×2):           Reconstructed Image x̂ (2×2):
+  ┌──────────────┬──────────────┐   ┌──────────────┬──────────────┐
+  │ Pixel 1: 0.00│ Pixel 2: 0.85│   │ Pixel 1: 0.02│ Pixel 2: 0.78│  (Dark background &
+  ├──────────────┼──────────────┤   ├──────────────┼──────────────┤   bright stroke)
+  │ Pixel 3: 0.92│ Pixel 4: 0.10│   │ Pixel 3: 0.88│ Pixel 4: 0.15│
+  └──────────────┴──────────────┘   └──────────────┴──────────────┘
+```
+
+The network compares every corresponding pixel element-by-element:
+
+| Pixel Position $i$ | Actual Pixel $x_i$ | Reconstructed Pixel $\hat{x}_i$ | Error $(x_i - \hat{x}_i)$ | Squared Error $(x_i - \hat{x}_i)^2$ |
+| :--- | :--- | :--- | :--- | :--- |
+| **Pixel 1** (Dark background) | $0.00$ | $0.02$ | $-0.02$ | $(-0.02)^2 = \mathbf{0.0004}$ |
+| **Pixel 2** (Bright stroke) | $0.85$ | $0.78$ | $+0.07$ | $(+0.07)^2 = \mathbf{0.0049}$ |
+| **Pixel 3** (Bright stroke) | $0.92$ | $0.88$ | $+0.04$ | $(+0.04)^2 = \mathbf{0.0016}$ |
+| **Pixel 4** (Dark background) | $0.10$ | $0.15$ | $-0.05$ | $(-0.05)^2 = \mathbf{0.0025}$ |
+
+**1. Mean Squared Error (MSE) Loss:**
+$$\text{MSE Loss} = \frac{1}{4}\sum_{i=1}^{4} (x_i - \hat{x}_i)^2 = \frac{0.0004 + 0.0049 + 0.0016 + 0.0025}{4} = \mathbf{0.00235}$$
+
+**2. Can we use Cross-Entropy on Pixels? (BCE on Pixels):**
+Yes! If pixels are normalized between $[0, 1]$, they can be mathematically treated as the **Bernoulli probability of a pixel being lit up (black vs white)**. Many seminal VAE papers use Binary Cross-Entropy (BCE):
+$$\text{BCE Loss} = -\sum_{i=1}^{D} \Big[ x_i \log(\hat{x}_i) + (1 - x_i) \log(1 - \hat{x}_i) \Big]$$
+BCE penalizes confident wrong pixels much more harshly than MSE, which often prevents blurry reconstructions.
+
+#### Continuous Regression (Images) vs. Discrete Cross-Entropy (Text)
+
+| Property | Pixel Reconstruction (Autoencoders / MAE) | Word Reconstruction (BERT / GPT) |
+| :--- | :--- | :--- |
+| **Data Nature** | Continuous real values ($x_i \in [0.0, 1.0]$) | Discrete integer symbols (Token ID $\in \{1, \dots, V\}$) |
+| **Model Output** | Vector of predicted intensities $\hat{x}_i \in [0, 1]$ | Vector of logits over full vocabulary $[1 \times V]$ |
+| **Loss Objective** | **MSE** ($\|x - \hat{x}\|^2$) or **BCE** | **Categorical Cross-Entropy** ($-\log p_{\text{target}}$) |
+| **Question Asked** | *"How close is your predicted brightness to 0.85?"* | *"Did you pick the correct word index from the 50,000 dictionary?"* |
+
+---
 
 ### Why Does the Bottleneck Force Learning?
 If the network had unlimited dimensions at the bottleneck ($z$ had 784 dims), it would learn the **identity function** — simply copying pixel 1 to output 1 without understanding anything.
