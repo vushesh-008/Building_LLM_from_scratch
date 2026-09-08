@@ -1,196 +1,258 @@
 # Contrastive Family — Learning by Comparing
 
-**Core idea across all variants:** no reconstruction. Instead, learn embeddings where **similar things are nearby** and **dissimilar things are far apart** in vector space.
+In the **Reconstruction Family**, models learn representations by rebuilding raw inputs ($x \to x$). 
+
+The **Contrastive Family** takes the opposite approach: **no reconstruction**. Instead of predicting pixels or words, the model learns an embedding space where **semantically similar items are pulled close together** and **dissimilar items are pushed far apart**.
 
 ```
-  Contrastive loss:
-  Pull together:  d(anchor, positive) → small
-  Push apart:     d(anchor, negative) → large
-
-  No labels needed — "similar" = same image under different augmentation,
-                                  same image-caption pair, same word context, etc.
+    Contrastive Representation Principle:
+    
+    Anchor (A) ──────── Pull together ────────► Positive (P)  [Cosine distance → 0]
+        │
+        └─────────────── Push apart ───────────► Negative (N)  [Cosine distance → large]
 ```
 
 ---
 
-## Word2Vec — The Original Contrastive Idea
+## The Big Picture: Why Contrastive Learning Matters for LLMs & AI
 
-Word2Vec (2013) learns word embeddings by predicting context. The **Skip-gram with Negative Sampling** variant is the clearest ancestor of modern contrastive learning.
+If your focus is LLMs, contrastive learning is one of the most important tools in your stack:
 
-**Task:** given a centre word, predict surrounding words (and distinguish them from random words).
-
-```
-  Sentence: "The cat sat on the mat"
-  Centre word: "sat"   Window size: 2
-
-  Positive pairs (co-occur):    ("sat", "cat"), ("sat", "on")
-  Negative pairs (random):      ("sat", "banana"), ("sat", "Europe")
-
-  Objective: score(sat, cat) >> score(sat, banana)
-```
-
-$$L = -\log \sigma(v_{\text{sat}} \cdot v_{\text{cat}}) - \sum_{k} \log \sigma(-v_{\text{sat}} \cdot v_{n_k})$$
-
-- $\sigma$ = sigmoid
-- First term: pull "sat" and "cat" together
-- Second term: push "sat" away from $k$ random negatives
-
-After training: similar words cluster together. "king" − "man" + "woman" ≈ "queen" — the famous analogy test — emerges from this objective, not from any explicit supervision.
-
-**Why this matters:** negative sampling is the first mainstream use of the pull/push contrastive structure. Every contrastive method that follows is a generalisation of this.
+1. **Text Embeddings & Vector Databases (RAG):** Modern text embedding models (OpenAI `text-embedding-3`, BGE, E5, Voyage) are trained **entirely on contrastive loss**. When you retrieve relevant documents for an LLM via RAG, a contrastively trained embedding model powers that search.
+2. **Vision-Language Alignment (VLMs):** Models like **CLIP** and **SigLIP** are the "eyes" of multimodal LLMs. They align visual tokens directly with the LLM's text space, allowing models like LLaVA, Gemini, and GPT-4V to understand images.
+3. **Unsupervised Pretraining without Labels:** Contrastive learning allows models to learn representations from trillions of uncurated web images and text snippets without requiring any human labels.
 
 ---
 
-## Triplet Loss
+## §1 — Word2Vec (2013): The Grandfather of Contrastive Learning
 
-Makes the pull/push explicit with three items: an **anchor**, a **positive** (similar to anchor), and a **negative** (dissimilar).
+Word2Vec (Mikolov et al., 2013) introduced the earliest mainstream contrastive framework: **Skip-gram with Negative Sampling (SGNS)**.
 
-```
-  Anchor (A):    photo of a golden retriever
-  Positive (P):  different photo of the same dog
-  Negative (N):  photo of a cat
-
-  Goal: d(A, P) + margin < d(A, N)
-  i.e. the positive must be closer than the negative by at least a margin
-```
-
-$$L = \max\!\left(0,\; d(A, P) - d(A, N) + \text{margin}\right)$$
+**The Task:** Given a target center word, predict which context words naturally appear nearby in a sliding window, while distinguishing them from random words drawn from the vocabulary.
 
 ```
-  Before training:          After training:
-  A · · N                   A P
-      P                         · · · N
-  (random positions)        (P pulled to A, N pushed away)
+  Sentence: "The quick brown fox jumps over the lazy dog"
+  Target Word: "fox" (Window size = 2)
+
+  Positive Pairs (co-occur):  ("fox", "quick"), ("fox", "brown"), ("fox", "jumps")
+  Negative Pairs (random):    ("fox", "banana"), ("fox", "quantum"), ("fox", "submarine")
 ```
 
-- $d$ is usually Euclidean distance or $1 - \cos(\text{similarity})$
-- **Margin** prevents collapse (if A=P=N, loss=0 trivially without margin)
-- Used in: FaceNet (face recognition), image retrieval
+### The Objective Function
+Instead of calculating a massive, expensive softmax over the entire 1,000,000-word vocabulary, Word2Vec treats each word pair as an independent binary classification:
 
-**Problem:** requires carefully mined hard negatives — random negatives are often too easy and give zero gradient once the model is slightly trained. Picking negatives that are "almost but not quite positive" is a whole sub-problem.
+$$\mathcal{L}_{\text{SGNS}} = -\log \sigma(v_{\text{target}} \cdot v_{\text{positive}}) - \sum_{k=1}^{K} \log \sigma(-v_{\text{target}} \cdot v_{\text{neg}_k})$$
+
+Where:
+* $\sigma$ is the sigmoid function.
+* The first term **maximizes probability** for true co-occurring words (pulls them together).
+* The second term **minimizes probability** for $K$ randomly sampled negative words (pushes them away).
+
+**The Result:** Words with similar meanings end up close together in vector space. Geometric relationships emerge naturally:
+$$\vec{v}_{\text{King}} - \vec{v}_{\text{Man}} + \vec{v}_{\text{Woman}} \approx \vec{v}_{\text{Queen}}$$
 
 ---
 
-## InfoNCE / SimCLR
+## §2 — Triplet Loss (2015): Explicit Pull-and-Push Geometry
 
-The key upgrade over triplet loss: instead of one negative at a time, use an **entire batch of negatives simultaneously**.
-
-**SimCLR setup:**
-
-```
-  Batch of N images: [img₁, img₂, ..., imgN]
-
-  For each image, create 2 augmented views:
-  img₁ → [aug_1a, aug_1b]    ← positive pair (same image, different crop/colour)
-  img₂ → [aug_2a, aug_2b]
-  ...
-
-  Positive pairs:  (aug_ia, aug_ib)  — same source image
-  Negative pairs:  (aug_ia, aug_jb)  for all j ≠ i  — different images
-```
-
-**InfoNCE loss** (for one anchor $aug_{1a}$, with $aug_{1b}$ as its positive):
-
-$$L = -\log \frac{\exp(\text{sim}(z_{1a}, z_{1b}) / \tau)}{\sum_{j=1}^{2N} \exp(\text{sim}(z_{1a}, z_j) / \tau)}$$
-
-- $\tau$ = temperature (controls sharpness of the distribution)
-- Numerator: similarity to positive (want this large)
-- Denominator: similarity to all $2N-1$ other views in the batch (want these small)
-
-```
-  N×N similarity matrix for a batch of 4 images (8 views):
-
-          1a    1b    2a    2b    3a    3b    4a    4b
-  1a    [  ✓    ✓     ✗     ✗     ✗     ✗     ✗     ✗  ]   ← want diagonal block high
-  1b    [  ✓    ✓     ✗     ✗     ✗     ✗     ✗     ✗  ]
-  2a    [  ✗    ✗     ✓     ✓     ✗     ✗     ✗     ✗  ]
-  ...
-
-  ✓ = positive pair (pull together)
-  ✗ = negative pair (push apart)
-```
-
-**Temperature $\tau$:**
-```
-  Low τ:   softmax very peaked → sharp discrimination, but unstable with bad negatives
-  High τ:  softmax flat → all negatives treated equally, slow learning
-  Typical: τ = 0.07 (CLIP) or τ = 0.1 (SimCLR)
-```
-
-**Why batch size matters:** more images in the batch = more negatives per anchor = harder task = better representations. SimCLR used batch sizes of 4096–8192.
-
----
-
-## CLIP
-
-CLIP applies InfoNCE to **image-text pairs** instead of augmented views of the same image.
-
-```
-  Batch of N (image, caption) pairs scraped from the web:
-
-  img₁: [photo of a dog]     cap₁: "a golden retriever playing fetch"
-  img₂: [photo of a city]    cap₂: "New York skyline at night"
-  ...
-
-  Positive:  (imgᵢ, capᵢ)   — matching pair
-  Negative:  (imgᵢ, capⱼ)   for j ≠ i  — mismatched pair
-```
-
-Two separate encoders:
+Popularized by **FaceNet** (Schroff et al., 2015) for facial recognition, Triplet Loss defines learning over triplets of samples:
+* **Anchor ($A$):** A photo of Person 1.
+* **Positive ($P$):** A different photo of Person 1 (different angle or lighting).
+* **Negative ($N$):** A photo of Person 2.
 
 ```mermaid
 flowchart LR
-    IMG["Image\n(224×224)"] --> VENC["ViT\nImage Encoder"] --> IV["image embedding\n[d]"]
-    TXT["Caption\ntext"] --> TENC["Text\nTransformer"] --> TV["text embedding\n[d]"]
-    IV --> SIM["N×N cosine\nsimilarity matrix"]
-    TV --> SIM
-    SIM --> LOSS["InfoNCE Loss\n(rows + columns)"]
+    A["Anchor (A)"] -->|Pull Closer| P["Positive (P)"]
+    A -->|Push Further| N["Negative (N)"]
+
+    style A fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    style P fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+    style N fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#991b1b
 ```
 
-$$L = \frac{1}{2}\left(L_{\text{image→text}} + L_{\text{text→image}}\right)$$
+### The Triplet Loss Formula
+We want the distance between the anchor and the positive to be smaller than the distance between the anchor and the negative by at least a safety **margin** $\alpha$:
 
-Both directions: each image should match its caption (row-wise), and each caption should match its image (column-wise).
+$$\mathcal{L}_{\text{Triplet}} = \max\Big(0, \; d(A, P) - d(A, N) + \alpha\Big)$$
 
-**What CLIP learns:** a **shared embedding space** where images and their descriptions end up at the same point. The ViT image encoder from CLIP is exactly what gets used in VLMs (LLaVA, InstructBLIP, etc.) because its representations are already language-aligned.
+Where $d(x, y) = \|f(x) - f(y)\|^2$ is the Euclidean distance in embedding space.
 
-**Zero-shot classification** (CLIP's party trick):
 ```
-  "a photo of a {cat}"  →  text embedding
-  "a photo of a {dog}"  →  text embedding
-  "a photo of a {car}"  →  text embedding
-       ↑
-  Run image through ViT → image embedding
-  → pick the class whose text embedding is most similar
-  → no task-specific training needed
+  Before Training:                   After Training:
+  
+     A · · · · · N                     A  P ──────── margin α ────────► N
+         P                             
+  (Random positions)                   (Positive pulled tight, Negative pushed past margin)
 ```
+
+> [!WARNING]
+> **The Hard Negative Mining Problem:**
+> If you pick negative samples randomly, most negatives are so obviously different from the anchor that $d(A, N)$ is already huge, meaning $d(A, P) - d(A, N) + \alpha \le 0$. The loss becomes 0, and the network stops learning! Triplet training requires complex **hard negative mining** algorithms to find negatives that are deceptively close to the anchor.
 
 ---
 
-## SigLIP
+## §3 — InfoNCE & SimCLR (2020): Batch-Level Multi-Negative Contrast
 
-SigLIP replaces CLIP's softmax (InfoNCE) with a **sigmoid binary cross-entropy** applied to each pair independently:
+Instead of comparing an anchor against a single negative, **InfoNCE** (van den Oord et al., 2018; Chen et al., 2020) compares each positive pair against an **entire mini-batch of hundreds or thousands of negatives simultaneously**.
 
-| | CLIP (InfoNCE) | SigLIP (sigmoid) |
-|---|---|---|
-| Loss type | Softmax over all negatives in batch | Per-pair sigmoid (independent) |
-| Batch dependency | Yes — each anchor competes against all others | No — each pair scored alone |
-| Batch size sensitivity | High — large batches needed for good negatives | Lower |
-| Stability | Unstable at small batch | More stable |
+### SimCLR Pipeline (Self-Supervised Vision)
 
-$$L_{\text{SigLIP}} = -\frac{1}{N^2}\sum_{i,j} \left[y_{ij} \log \sigma(s_{ij}) + (1-y_{ij}) \log (1 - \sigma(s_{ij}))\right]$$
+```mermaid
+flowchart TD
+    IMG["Original Image x"] --> AUG1["Augmentation 1\n(Crop + Color Jitter)"]
+    IMG --> AUG2["Augmentation 2\n(Flip + Blur)"]
+    
+    AUG1 --> VIEW1["View x_i"]
+    AUG2 --> VIEW2["View x_j (Positive Pair!)"]
+    
+    VIEW1 --> ENC1["Base Encoder f(·)\n(ResNet or ViT)"]
+    VIEW2 --> ENC2["Base Encoder f(·)\n(Shared Weights)"]
+    
+    ENC1 --> H1["Representation h_i"]
+    ENC2 --> H2["Representation h_j"]
+    
+    H1 --> PROJ1["Projection Head g(·)\n(MLP)"]
+    H2 --> PROJ2["Projection Head g(·)\n(MLP)"]
+    
+    PROJ1 --> Z1["Latent z_i"]
+    PROJ2 --> Z2["Latent z_j"]
+    
+    Z1 & Z2 --> LOSS["InfoNCE Loss\n(Contrast against all other 2N-2 samples in batch)"]
 
-where $y_{ij} = 1$ if pair $(i,j)$ is a match, 0 otherwise, and $s_{ij}$ is the dot product similarity.
+    style IMG fill:#f3f4f6,stroke:#9ca3af,stroke-width:1.5px,color:#111827
+    style AUG1 fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#3730a3
+    style AUG2 fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#3730a3
+    style VIEW1 fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#9a3412
+    style VIEW2 fill:#ffedd5,stroke:#ea580c,stroke-width:1.5px,color:#9a3412
+    style ENC1 fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style ENC2 fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style H1 fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+    style H2 fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+    style PROJ1 fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style PROJ2 fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style Z1 fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    style Z2 fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    style LOSS fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#991b1b
+```
 
-Each pair is treated as an independent binary classification: "do these match?" The N×N matrix with N positives and $N^2-N$ negatives is scored entry by entry.
+### The InfoNCE Loss Formula
+For a positive pair $(z_i, z_j)$ in a batch of size $N$ (yielding $2N$ augmented views):
+
+$$\mathcal{L}_{i,j} = -\log \frac{\exp\left(\text{sim}(z_i, z_j) / \tau\right)}{\sum_{k=1}^{2N} \mathbb{I}_{[k \ne i]} \exp\left(\text{sim}(z_i, z_k) / \tau\right)}$$
+
+Where:
+* $\text{sim}(u, v) = \frac{u^\top v}{\|u\| \|v\|}$ is cosine similarity.
+* $\tau$ is the **temperature hyperparameter** (controls how sharply hard negatives are penalized; typically $\tau \approx 0.07$ to $0.1$).
+* The denominator treats the other **$2N - 2$ images in the batch as negative examples**.
+
+> [!NOTE]
+> **Why Large Batch Size is Critical:**
+> The larger your batch size $N$, the more negative samples the model is forced to differentiate against in the denominator. SimCLR required huge batch sizes ($N = 4096$) to achieve state-of-the-art representations.
 
 ---
 
-## Contrastive Family Summary
+## §4 — CLIP: Aligning Vision and Language
 
-| Method | Positives | Negatives | Loss | Key idea |
-|---|---|---|---|---|
-| Word2Vec | Co-occurring words | Random vocabulary words | Sigmoid binary | Pull context words together |
-| Triplet loss | Same class / identity | Different class | Max-margin | Explicit anchor/pos/neg triplet |
-| InfoNCE / SimCLR | Two augmented views of same image | Other images in batch | Softmax cross-entropy | Batch = pool of negatives |
-| CLIP | Matching image-caption pair | All other pairs in batch | InfoNCE (both directions) | Shared image-text embedding space |
-| SigLIP | Matching image-caption pair | All other pairs in batch | Per-pair sigmoid BCE | No batch-level normalisation |
+Published by OpenAI (Radford et al., 2021), **CLIP (Contrastive Language-Image Pretraining)** applied InfoNCE across **multimodal pairs**.
+
+Instead of augmenting images, CLIP trains on **400 million (image, caption) pairs** scraped from the internet:
+* **Positive Pair:** An image and its actual matching text caption: $(I_i, T_i)$.
+* **Negative Pairs:** That image paired with every other text caption in the mini-batch: $(I_i, T_j)$ where $j \ne i$.
+
+```mermaid
+flowchart TD
+    subgraph Encoders ["Dual Encoders"]
+        IMG["Batch of N Images\n[I₁, I₂, ..., I_N]"] --> VENC["Vision Transformer\n(ViT Encoder)"] --> I_EMB["Normalized Image Embeddings\n[N × d]"]
+        TXT["Batch of N Captions\n[T₁, T₂, ..., T_N]"] --> TENC["Text Transformer\n(Causal/Masked Encoder)"] --> T_EMB["Normalized Text Embeddings\n[N × d]"]
+    end
+    
+    subgraph Matrix ["N × N Cosine Similarity Matrix"]
+        I_EMB & T_EMB --> SIM["Matrix Multiplication\nS = I_EMB · T_EMBᵀ / τ"]
+    end
+    
+    SIM --> LOSS["Symmetric InfoNCE Loss\n(Row-wise: Image-to-Text Cross Entropy)\n(Col-wise: Text-to-Image Cross Entropy)"]
+
+    style IMG fill:#f3f4f6,stroke:#9ca3af,stroke-width:1.5px,color:#111827
+    style TXT fill:#f3f4f6,stroke:#9ca3af,stroke-width:1.5px,color:#111827
+    style VENC fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style TENC fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    style I_EMB fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+    style T_EMB fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+    style SIM fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    style LOSS fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#991b1b
+```
+
+### Symmetric InfoNCE Loss
+The model optimizes both directions simultaneously:
+$$\mathcal{L}_{\text{CLIP}} = \frac{1}{2}\left(\mathcal{L}_{\text{Image} \to \text{Text}} + \mathcal{L}_{\text{Text} \to \text{Image}}\right)$$
+
+$$\mathcal{L}_{\text{Image} \to \text{Text}} = -\frac{1}{N} \sum_{i=1}^{N} \log \frac{\exp(I_i \cdot T_i / \tau)}{\sum_{j=1}^{N} \exp(I_i \cdot T_j / \tau)}$$
+
+### CLIP's Superpower: Zero-Shot Classification
+Because images and text share a unified geometric space, you can classify images into novel classes without any training examples:
+1. Turn class labels into text prompts: `"a photo of a {dog}"`, `"a photo of a {cat}"`, `"a photo of a {car}"`.
+2. Compute embeddings for each text prompt.
+3. Compute the image embedding.
+4. Predict the class with the highest cosine similarity!
+
+---
+
+## §5 — SigLIP: Removing the Batch Size Dependency
+
+Published by Google (Zhai et al., 2023), **SigLIP (Sigmoid Loss for Language-Image Pretraining)** addresses the biggest architectural headache of CLIP: **the Softmax denominator**.
+
+In standard CLIP, the Softmax denominator normalizes across all items in the batch. This means:
+* You **must gather all representations across all GPUs** before computing the loss (a costly all-gather communication barrier).
+* Small batches degrade representation quality because there aren't enough negative samples.
+
+### The SigLIP Upgrade: Pairwise Binary Cross-Entropy
+SigLIP replaces the batch-level Softmax with **independent binary classification** for every cell in the $N \times N$ similarity matrix:
+
+$$\mathcal{L}_{\text{SigLIP}} = -\frac{1}{N} \sum_{i=1}^{N} \sum_{j=1}^{N} \log \sigma\left(y_{ij} \cdot (I_i \cdot T_j \cdot t + b)\right)$$
+
+Where $y_{ij} = 1$ if $i = j$ (matching positive pair) and $y_{ij} = -1$ if $i \ne j$ (negative pair).
+
+| Feature | Standard CLIP (InfoNCE) | SigLIP (Sigmoid Loss) |
+| :--- | :--- | :--- |
+| **Loss Function** | Categorical Softmax Cross-Entropy | Pairwise Sigmoid Binary Cross-Entropy |
+| **Cross-Device Communication** | Requires expensive All-Gather of embeddings across GPUs | Decoupled; can be computed asynchronously |
+| **Small Batch Performance** | Struggles significantly with small batches | Highly robust at small batch sizes |
+| **Memory Efficiency** | High memory overhead | Lower memory footprint; scales to massive batches |
+| **Modern Adoption** | Foundation of early VLMs (LLaVA-1.5) | Adopted by Google **PaliGemma** and modern VLMs |
+
+---
+
+## §6 — Contrastive Text Embeddings for RAG (SBERT, BGE, E5)
+
+Contrastive learning is not just for multimodal images; it is the exact engine behind modern **Retrieval-Augmented Generation (RAG)**.
+
+When an LLM answers questions using external knowledge:
+1. A **Bi-Encoder** (like BGE, E5, or OpenAI `text-embedding-3`) independently embeds the user's **Query** $q$ and millions of stored **Documents** $d$.
+2. The model is trained contrastively:
+   $$\mathcal{L}_{\text{RAG}} = -\log \frac{\exp(\text{sim}(q, d^+) / \tau)}{\exp(\text{sim}(q, d^+) / \tau) + \sum_{k} \exp(\text{sim}(q, d_k^-) / \tau)}$$
+3. At inference time, vector databases (like FAISS or Pinecone) perform fast Approximate Nearest Neighbor (ANN) search to find the closest document vectors in milliseconds.
+
+---
+
+## §7 — Summary: The Complete Contrastive Family
+
+| Method | Anchor | Positives | Negatives | Objective Function | Key Impact |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Word2Vec (SGNS)** | Center word | Surrounding context words | Random vocabulary words | Binary Sigmoid Cross-Entropy | Semantic vector math ($\text{King} - \text{Man} \approx \text{Queen}$) |
+| **Triplet Loss** | Single image | Same identity / class | Different identity | Max-Margin Ranking Loss | FaceNet, image verification |
+| **SimCLR** | Image view | Another augmented view of same image | Other images in the mini-batch | Multi-class InfoNCE Softmax | Unsupervised computer vision pretraining |
+| **CLIP** | Image | Matching natural language caption | Mismatched captions in mini-batch | Dual Symmetric InfoNCE | Zero-shot classification, eyes of modern VLMs |
+| **SigLIP** | Image | Matching natural language caption | Mismatched captions in mini-batch | Pairwise Sigmoid BCE | Scalable, efficient multimodal alignment |
+| **Dense Embeddings (BGE/E5)** | Search Query | Ground-truth relevant document | Irrelevant / mined hard negative documents | InfoNCE with hard negative mining | Powering modern RAG and semantic vector search |
+
+---
+
+## Landmark Papers to Know
+
+1. **Word2Vec:** [Mikolov et al. (2013) — *Distributed Representations of Words and Phrases and their Compositionality*](https://arxiv.org/abs/1310.4546)
+2. **FaceNet & Triplet Loss:** [Schroff, Kalenichenko, & Philbin (2015) — *FaceNet: A Unified Embedding for Face Recognition and Clustering*](https://arxiv.org/abs/1503.03832)
+3. **Representation Learning with Contrastive Predictive Coding (InfoNCE):** [van den Oord, Li, & Vinyals (2018) — *CPC & InfoNCE*](https://arxiv.org/abs/1807.03748)
+4. **SimCLR:** [Chen et al. (2020) — *A Simple Framework for Contrastive Learning of Visual Representations*](https://arxiv.org/abs/2002.05709)
+5. **CLIP:** [Radford et al. (2021) — *Learning Transferable Visual Models From Natural Language Supervision*](https://arxiv.org/abs/2103.00020)
+6. **SigLIP:** [Zhai et al. (2023) — *Sigmoid Loss for Language Image Pre-Training*](https://arxiv.org/abs/2303.15343)
+7. **Sentence-BERT:** [Reimers & Gurevych (2019) — *Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks*](https://arxiv.org/abs/1908.10084)
