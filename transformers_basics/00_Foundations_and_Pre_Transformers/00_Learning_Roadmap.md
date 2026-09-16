@@ -12,7 +12,8 @@ PHASE 0 — Pre-Transformers & Foundations                 ← 00_Foundations_an
   ├─ RNN Era & Bahdanau attention
   ├─ Reconstruction family (VAEs, MAE)
   ├─ Generative flows & Diffusion (DDPM, Flow Matching)
-  └─ Contrastive family (Word2Vec, CLIP, SigLIP)
+  ├─ Contrastive family (Word2Vec, CLIP, SigLIP)
+  └─ Tokenization & BPE (Subwords, Byte-level, Embeddings)
 
 PHASE 1 — Transformer Mechanics                          ← 01_Transformer_Core_Mechanics.md
   ├─ Token embeddings, QKV attention, scaling
