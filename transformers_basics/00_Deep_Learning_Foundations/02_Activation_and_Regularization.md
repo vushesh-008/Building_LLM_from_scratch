@@ -10,22 +10,20 @@ To solve these, we must carefully choose our **Activation Functions** and employ
 
 ### Part 1: Activation Functions
 
-An activation function introduces non-linearity into the network. Without it, stacking 100 layers would just collapse into one giant linear equation. 
+An activation function introduces non-linearity into the network. 
 
-![Sigmoid vs Tanh vs ReLU — side by side](../images/activation_functions_sigmoid_relu_tanh.png)
+**Why is non-linearity important?**
+If you don't use an activation function, every layer in the network is just performing a linear transformation (multiplying by weights and adding biases). If you stack 100 linear layers on top of each other, the math mathematically simplifies down to a single linear layer. The deep network becomes no more powerful than a simple line of best fit, and it will be completely incapable of learning complex patterns like images or language.
 
-Three things to notice in the chart above:
-- **Sigmoid** (blue): output is always positive (0 to 1), saturates at both ends → vanishing gradients
-- **Tanh** (orange): zero-centred (−1 to 1), still saturates → vanishing gradients but less bias shift
-- **ReLU** (green): linear for x > 0, zero for x ≤ 0, never saturates on the positive side → gradient stays exactly 1
+By passing the output through a non-linear curve, the network can bend and twist its decision boundary to fit incredibly complex data.
 
 #### 1. Sigmoid
-The Sigmoid function squashes inputs into a range between `0` and `1`.
+The Sigmoid function squashes inputs into a smooth curve ranging between `0` and `1`. It was very popular in early AI because it mimics biological neurons (which are either "firing" or "not firing").
 $$a = \sigma(z) = \frac{1}{1 + e^{-z}}$$
 **Derivative:** $da = \sigma(z) \cdot (1 - \sigma(z))$
 
 #### 2. Tanh (Hyperbolic Tangent)
-Tanh is similar to Sigmoid but squashes inputs between `-1` and `1`, which centres the data around zero.
+Tanh is mathematically similar to Sigmoid but squashes inputs between `-1` and `1`. This is generally strictly superior to Sigmoid because it centres the data around zero, making the next layer's learning much easier.
 $$a = \tanh(z) = \frac{e^z - e^{-z}}{e^z + e^{-z}}$$
 **Derivative:** $da = 1 - (\tanh(z))^2$
 
@@ -33,54 +31,54 @@ $$a = \tanh(z) = \frac{e^z - e^{-z}}{e^z + e^{-z}}$$
 Why are Sigmoid and Tanh rarely used in deep networks today? Because of the **Vanishing Gradient Problem**. 
 
 Look at the derivative of the Sigmoid function: $da = \sigma(z)(1 - \sigma(z))$. 
-The maximum possible value of this derivative is `0.25` (when $\sigma(z) = 0.5$). 
+The absolute maximum possible value of this derivative is `0.25` (when the input is exactly 0). 
 
-Because the derivative is always $\le 1$, the chain rule causes a massive problem. When backpropagating through many layers, we continuously multiply these small derivatives together ($0.25 \times 0.25 \times 0.25 \dots$). 
-As we get to the initial layers of a deep network, the gradient becomes exponentially small, effectively freezing the weights and preventing the early layers from learning anything.
+During backpropagation, the chain rule requires us to multiply the derivatives of each layer together. If you have a 100-layer network, you are multiplying numbers that are at most `0.25` together 100 times.
+$$0.25 \times 0.25 \times 0.25 \dots = 0.0000000000001$$
+
+By the time the error signal reaches the early layers of the network, the gradient is so microscopically small that the weights effectively don't update. The early layers freeze and fail to learn anything.
 
 #### 3. ReLU (Rectified Linear Unit)
-To fix this, modern networks use **ReLU**. 
+To fix this, modern networks almost exclusively use **ReLU** for their hidden layers. 
 $$a = \max(0, z)$$
-If $z > 0$, the derivative is exactly `1`. If $z \le 0$, the derivative is exactly `0`.
-Because the derivative is `1` for positive values, the gradient does not vanish when multiplied across many layers!
+It is a simple hinge: If the input is negative, it outputs `0`. If the input is positive, it passes it through unchanged.
+
+**Why is this a breakthrough?**
+If $z > 0$, the derivative is exactly `1`.
+When you chain rule `1` together 100 times, it stays `1`! The gradient does not vanish, allowing us to train incredibly deep networks.
 
 **The Downside of ReLU:**
-1. **Exploding Gradients:** Because gradients don't vanish, they can instead grow exponentially large. This is solved using **Gradient Clipping** (capping the maximum gradient value).
-2. **Dead Neurons:** If a neuron's weights update such that it always outputs a negative number, its ReLU output becomes `0`, and its gradient becomes `0`. It can never recover and "dies". 
+1. **Exploding Gradients:** Because gradients don't vanish, they can instead grow exponentially large in some cases. We solve this using **Gradient Clipping** (setting a hard speed limit on the maximum gradient value).
+2. **Dead Neurons:** If a neuron's weights update such that it always outputs a negative number for every input in the dataset, its ReLU output becomes `0`, and its gradient becomes `0`. It can never recover and permanently "dies". 
 
-**Leaky ReLU** solves the dead neuron problem by allowing a tiny negative slope:
-$$a = \max(0.01z, z)$$
-
-#### Initialization Matters
-To further prevent exploding/vanishing gradients, we must initialize our weights smartly rather than purely randomly. 
-For ReLU activation functions, we use **He Initialization** (setting the variance of the weights to $\frac{2}{n}$). For Tanh, we use **Xavier Initialization** (variance $\frac{1}{n}$).
+*(Note: **Leaky ReLU** solves the dead neuron problem by allowing a tiny negative slope instead of a flat zero: $a = \max(0.01z, z)$)*
 
 ---
 
 ### Part 2: Regularization (Solving Overfitting)
 
-**High Bias** means the network is underfitting (it can't even learn the training data). The solution is a bigger network and longer training.
-**High Variance** means the network is overfitting (it memorized the training data and fails on test data). The solution is Regularization.
+When evaluating an AI model, we look at two metrics:
+1. **Bias (Underfitting):** The model is too simple. It performs terribly on the training data. The solution is to train longer or build a bigger network.
+2. **Variance (Overfitting):** The model performs flawlessly on the training data, but terribly on new data. It has literally memorized the training set. The solution is **Regularization**.
 
 #### 1. L2 Regularization (Weight Decay)
-L2 Regularization penalizes the network for having excessively large weights by adding the **Frobenius Norm** to the cost function.
+L2 Regularization mathematically penalizes the network for relying too heavily on any single weight. It does this by adding the **Frobenius Norm** (the sum of the squared weights) to the cost function.
 
 $$J_{reg} = J(w,b) + \frac{\lambda}{2m} \|W\|_F^2$$
 
-During backpropagation, this naturally shrinks the weights on every step:
-$$w = w - \alpha \cdot dw - \alpha \frac{\lambda}{m} w$$
-$$w = w(1 - \frac{\alpha \lambda}{m}) - \alpha \cdot dw$$
-Because we constantly multiply $w$ by a fraction $(1 - \frac{\alpha \lambda}{m})$, this is also known as **Weight Decay**.
+During backpropagation, this naturally shrinks the weights on every single step:
+$$w_{\text{new}} = w_{\text{old}} (1 - \frac{\alpha \lambda}{m}) - \alpha \cdot dw$$
+Because we constantly multiply $w$ by a fraction slightly less than 1, this is also known as **Weight Decay**. It forces the network to keep all its weights small and distributed.
 
 #### 2. Dropout Regularization
-Dropout is a highly effective, adaptive form of regularization. 
+Dropout is a highly effective, seemingly insane form of regularization. 
 
-During every pass of training, we set a probability (e.g., `keepprob = 0.8`) and randomly turn off 20% of the neurons in the network. 
-*Why does this work?* The network can no longer rely on any single specific feature or neuron, because that neuron might be randomly dropped. It is forced to spread out its weights and learn redundant, robust features.
+During every pass of training, we set a probability (e.g., `keep_prob = 0.8`) and **randomly turn off 20% of the neurons** in the network. 
 
-*(Note: Inverted Dropout mathematically scales the remaining neurons during training by dividing by `keepprob`, so that during test time, the full network can run without any scaling adjustments).*
+*Why on earth does destroying our own network help it learn?*
+Imagine a team of 10 workers trying to build a house, but one worker is a genius who does everything while the other 9 slack off. If the genius gets sick, the house doesn't get built. 
+Dropout randomly fires workers every day. The network can no longer rely on any single "genius" feature or neuron, because that neuron might be randomly dropped. It is forced to spread out its knowledge and learn redundant, robust features across all neurons.
 
 #### 3. Other Methods
-1. **Data Augmentation:** Modifying the training set (e.g., randomly distorting or flipping images) to artificially increase the size of the dataset and force the model to generalize.
-2. **Early Stopping:** Tracking the error on a Dev Set during training. If the Training error continues to drop but the Dev Set error begins to rise (the exact moment of overfitting), we stop training early.
-3. **Normalizing Inputs:** By modifying the optimization problem (subtracting the mean $\mu$ and dividing by the variance $\sigma^2$), we turn elongated, skewed loss landscapes into perfect bowls, making gradient descent converge much faster.
+1. **Data Augmentation:** If your model is memorizing images of cats, flip the images horizontally, zoom in, or distort the colors. You have artificially doubled your dataset size, making it much harder to memorize.
+2. **Early Stopping:** Track the error on a hidden "Dev Set" during training. As the model trains, the training error will drop forever. However, at some point, the Dev Set error will hit a minimum and begin to rise (this is the exact moment the model stops learning and starts memorizing). Stop the training right there.

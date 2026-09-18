@@ -17,12 +17,12 @@ PHASE 1 — NLP and Sequence Foundations                   ← 01_NLP_and_Sequen
   ├─ Embeddings & Word2Vec (Integers to Vectors)
   └─ RNNs, Seq2Seq Bottleneck, and Attention
 
-PHASE 2 — Transformer Mechanics                          ← 02_Transformer_Core_Mechanics.md
+PHASE 2 — Transformer Mechanics                          ← 02_Transformer_Core_Mechanics/
   ├─ Token embeddings, QKV attention, scaling
   ├─ Multi-head attention, FFN, residuals, LayerNorm
   └─ Positional encodings: sinusoidal, ALiBi, RoPE
 
-PHASE 3 — Architectures & Model Families                 ← 03_Architecture_and_Model_Families.md
+PHASE 3 — Architectures & Model Families                 ← 03_Architecture_and_Model_Families/
   ├─ Encoder-decoder (original Transformer, T5)
   ├─ Decoder-only (GPT, LLaMA, Mistral)
   └─ Encoder-only (BERT)
@@ -32,7 +32,7 @@ PHASE 4 — Training and Alignment                         ← 04_Training_and_A
   ├─ Supervised Fine-Tuning (SFT) & LoRA
   └─ Alignment (RLHF, DPO, GRPO)
 
-PHASE 5 — Decoding and Generation                        ← 05_Decoding_and_Output_Generation.md
+PHASE 5 — Decoding and Generation                        ← 05_Decoding_and_Output_Generation/
   ├─ Temperature scaling
   ├─ Greedy vs Beam Search
   ├─ Sampling (Top-k, Top-p)
@@ -44,11 +44,11 @@ PHASE 6 — Inference, Hardware, and Scaling               ← 06_Inference_Hard
   ├─ Distributed training (ZeRO/FSDP, pipeline)
   └─ Scaling with Mixture of Experts (MoE)
 
-PHASE 7 — Vision Transformers & Multimodality            ← 07_Multimodality_VLMs_and_VLAs.md
+PHASE 7 — Vision Transformers & Multimodality            ← 07_Multimodality_VLMs_and_VLAs/
   ├─ ViT (patch tokenisation, CLS)
   ├─ VLMs (ViT + adapter + causal LLM)
   └─ VLAs (action bins, compounding error)
 
-PHASE 8 — Conceptual Q&A                                 ← 08_Conceptual_QA_Bank.md
+PHASE 8 — Conceptual Q&A                                 ← 08_Conceptual_QA_Bank/
   └─ Self-assessment for deep understanding
 ```
