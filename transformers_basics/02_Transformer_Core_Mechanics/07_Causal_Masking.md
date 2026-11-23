@@ -1,8 +1,10 @@
-## 7. Causal Masking (Look-Ahead Masking)
+## 6. Causal Masking (Look-Ahead Masking)
 
 In Phase 1, we learned that during self-attention, **every token queries every other token simultaneously**. The formula $S = QK^\top$ computes the similarity scores between all tokens.
 
 However, if we are training a **Decoder-Only LLM** (like GPT or LLaMA) to predict the *next* word, we have a massive problem. 
+
+![Causal Masking Pipeline: Raw Scores to -Infinity Mask to Row-Wise Softmax](../images/causal_mask_softmax_pipeline.svg)
 
 ### The Problem: Cheating
 Imagine we feed the sequence `"The cat sat"` into the model and ask it to predict the word after `"The"`. 
@@ -35,6 +37,25 @@ Now, when we compute the final output $A \cdot V$:
 - Token 1's output is made *only* from Token 1's value.
 - Token 2's output is a mix of Token 1 and 2's values.
 - Token 3's output is a mix of Token 1, 2, and 3's values.
+
+### Why Not Just Multiply by `0` *After* Softmax? (Common Interview Question)
+If you computed Softmax over the full unmasked row first (e.g., row 1 weights `[0.50, 0.30, 0.20]`) and *then* zeroed out the upper triangle (`[0.50, 0.00, 0.00]`):
+1. **Broken Probability Distribution:** Row 1 now sums to `0.50` instead of `1.00`!
+2. **Future Information Leakage:** Even if you re-normalized, the raw score of future tokens ($e^{s_{12}} + e^{s_{13}}$) was already inside the Softmax denominator $\sum_{j=1}^3 e^{s_{1j}}$, meaning future tokens still altered the magnitude of past weights!
+By setting $s_{ij} = -\infty$ **before** Softmax, $e^{-\infty} = 0$ contributes **zero** to both the numerator and denominator.
+
+### PyTorch Implementation + Attention Dropout (Raschka Ch. 3)
+```python
+# 1. Create upper-triangular boolean mask above the main diagonal (diagonal=1):
+mask = torch.triu(torch.ones(context_length, context_length), diagonal=1)
+
+# 2. Fill upper-triangle where mask == 1 with -inf BEFORE softmax:
+attn_scores.masked_fill_(mask.bool()[:num_tokens, :num_tokens], -torch.inf)
+
+# 3. Apply row-wise softmax and optional Attention Dropout (e.g. p=0.1 during training):
+attn_weights = torch.softmax(attn_scores / (d_k ** 0.5), dim=-1)
+attn_weights = dropout(attn_weights)
+```
 
 ### Summary
 By simply adding $-\infty$ to the upper triangle of the score matrix, we force the model to be strictly autoregressive (causal). It learns to predict the future based only on the past, even though it processes the entire sequence in parallel!

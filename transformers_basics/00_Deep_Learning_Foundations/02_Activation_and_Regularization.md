@@ -17,6 +17,8 @@ If you don't use an activation function, every layer in the network is just perf
 
 By passing the output through a non-linear curve, the network can bend and twist its decision boundary to fit incredibly complex data.
 
+![Activation Functions: Sigmoid, Tanh, and ReLU](../images/activation_functions_sigmoid_relu_tanh.png)
+
 #### 1. Sigmoid
 The Sigmoid function squashes inputs into a smooth curve ranging between `0` and `1`. It was very popular in early AI because it mimics biological neurons (which are either "firing" or "not firing").
 $$a = \sigma(z) = \frac{1}{1 + e^{-z}}$$
@@ -37,6 +39,8 @@ During backpropagation, the chain rule requires us to multiply the derivatives o
 $$0.25 \times 0.25 \times 0.25 \dots = 0.0000000000001$$
 
 By the time the error signal reaches the early layers of the network, the gradient is so microscopically small that the weights effectively don't update. The early layers freeze and fail to learn anything.
+
+![Gradient Magnitude Decay Across Backpropagation Distance](../images/gradient_magnitude_vs_backprop_distance.png)
 
 #### 3. ReLU (Rectified Linear Unit)
 To fix this, modern networks almost exclusively use **ReLU** for their hidden layers. 

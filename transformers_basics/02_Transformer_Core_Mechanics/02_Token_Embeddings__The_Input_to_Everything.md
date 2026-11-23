@@ -43,6 +43,18 @@ An **embedding table** $E \in \mathbb{R}^{V \times d_{model}}$ holds one learned
 
 The embedding table is updated by backpropagation just like any weight matrix.
 
+### Why Embedding Lookup Is Mathematically Identical to One-Hot Matrix Multiplication
+In *Build a Large Language Model from Scratch* (Ch. 2), Sebastian Raschka highlights an important equivalence:
+- Suppose vocabulary size $V = 4$ and $d_{\text{model}} = 3$, and we look up token ID `2`.
+- Represent token ID `2` as a **one-hot row vector** $\mathbf{o}_2 = [0, 0, 1, 0] \in \mathbb{R}^{1 \times 4}$.
+- Multiply $\mathbf{o}_2$ by the embedding weight matrix $E \in \mathbb{R}^{4 \times 3}$:
+  $$[0, \; 0, \; 1, \; 0] \cdot \begin{bmatrix} e_{00} & e_{01} & e_{02} \\ e_{10} & e_{11} & e_{12} \\ \mathbf{e_{20}} & \mathbf{e_{21}} & \mathbf{e_{22}} \\ e_{30} & e_{31} & e_{32} \end{bmatrix} = [\mathbf{e_{20}}, \; \mathbf{e_{21}}, \; \mathbf{e_{22}}] \quad (\text{Row 2 of } E!)$$
+- Thus, `nn.Embedding(V, d_model)` is mathematically identical to a `nn.Linear(V, d_model, bias=False)` layer fed with one-hot vectors — except `nn.Embedding` skips multiplying by all the `0`s and directly fetches Row $i$ in $O(1)$ memory lookup!
+
+### Weight Tying (Sharing Input Embeddings with the Output LM Head)
+Many LLMs (including GPT-2, LLaMA-3 8B, and Gemma) **tie (share)** the input embedding matrix $E \in \mathbb{R}^{V \times d_{\text{model}}}$ with the final output projection head $W_{\text{out}} = E^\top \in \mathbb{R}^{d_{\text{model}} \times V}$.
+- **Why?** It saves hundreds of millions of parameters (e.g., $50,257 \times 768 \approx 38.6\text{M}$ params in GPT-2) and enforces a clean symmetry: tokens with similar input embeddings also receive similar output logit scores.
+
 ### Shape summary
 
 ```

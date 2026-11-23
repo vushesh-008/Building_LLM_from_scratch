@@ -1,4 +1,4 @@
-## 7. Feed-Forward Networks & Activation Functions
+## 9. Feed-Forward Networks & Activation Functions
 
 Every transformer block applies a Feed-Forward Network (FFN) independently to each token position after attention:
 
@@ -60,6 +60,11 @@ $$\text{SwiGLU}(x) = \text{Swish}(W_1 x) \odot (W_3 x) \qquad \text{where} \quad
 - Multiplied element-wise: adaptive, input-dependent non-linearity
 
 Adds a third weight matrix $W_3$ but FFN width is typically reduced to keep total FLOPs constant. Empirically outperforms GELU across the board.
+
+> **Why SwiGLU Uses Hidden Width $\frac{8}{3} d_{\text{model}}$ Instead of $4 d_{\text{model}}$:**
+> - A standard 2-matrix FFN ($W_1 \in \mathbb{R}^{d \times 4d}$, $W_2 \in \mathbb{R}^{4d \times d}$) has $2 \times (d \times 4d) = \mathbf{8 d^2}$ parameters.
+> - SwiGLU has **3 matrices** ($W_1, W_3 \in \mathbb{R}^{d \times d_{\text{ff}}}$ and $W_2 \in \mathbb{R}^{d_{\text{ff}} \times d}$), totaling $3 \times d \times d_{\text{ff}}$ parameters.
+> - Setting $d_{\text{ff}} = \frac{2}{3}(4d) = \mathbf{\frac{8}{3} d}$ makes the total parameter count $3 \times d \times \frac{8}{3}d = \mathbf{8 d^2}$ — matching the exact parameter and FLOP budget of a standard $4d$ FFN!
 
 ### Summary
 

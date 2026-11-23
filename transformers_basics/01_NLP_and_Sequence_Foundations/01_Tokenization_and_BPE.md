@@ -70,30 +70,69 @@ Every word begins decomposed into individual characters:
 We count all adjacent symbol pairs across all words, but we must remember to **multiply by how many times the word itself appears in our dataset**. 
 
 > [!NOTE]
-> **How is this computed in code?**
-> We do NOT generate a massive combination of all possible letters (e.g. $10 \choose 2$). We only care about characters that actually sit next to each other.
->
-> 1. We loop through each unique word in the corpus.
-> 2. For a word of length $L$, we extract its $L-1$ adjacent pairs by sliding a window of size 2.
-> 3. We add those pairs to a Hash Map, tallying up the word's corpus frequency.
+> **How is this computed in code? (Counting Pairs + Updating the Corpus)**
+> We do NOT generate a massive combination of all possible letters (e.g. $10 \choose 2$). Each BPE iteration has **two steps in code**:
+> 1. **Count adjacent pairs** across all words in `corpus` (weighted by word count).
+> 2. **Update the `corpus` dictionary** by scanning through each word with an index pointer `i`: whenever `(word[i], word[i+1]) == best_pair`, merge them into a single string and jump `i += 2`; otherwise keep `word[i]` and step `i += 1`.
 >
 > ```python
-> pair_frequencies = {}
-> 
-> for word, count in corpus.items():
->     # Example: word = ["n", "e", "w", "e", "s", "t"], count = 6
->     # Extract L-1 adjacent pairs:
->     for i in range(len(word) - 1):
->         pair = (word[i], word[i+1])
->         
->         if pair not in pair_frequencies:
->             pair_frequencies[pair] = 0
->         # Add the word's total corpus count to the pair's tally
->         pair_frequencies[pair] += count
-> 
-> # Finally, just find the pair with the maximum value in the hash map!
-> ``` 
+> # Initial corpus: keys are tuples of tokens (since lists can't be dict keys), values are word counts
+> corpus = {
+>     ("l", "o", "w"): 5,
+>     ("l", "o", "w", "e", "r"): 2,
+>     ("n", "e", "w", "e", "s", "t"): 6,
+>     ("w", "i", "d", "e", "s", "t"): 3,
+> }
 >
+> def get_pair_frequencies(corpus):
+>     """Step 1: Count all adjacent token pairs weighted by word frequency."""
+>     pair_frequencies = {}
+>     for word, count in corpus.items():
+>         # Example: word = ("n", "e", "w", "e", "s", "t"), count = 6
+>         for i in range(len(word) - 1):
+>             pair = (word[i], word[i + 1])
+>             pair_frequencies[pair] = pair_frequencies.get(pair, 0) + count
+>     return pair_frequencies
+>
+> def merge_pair_in_corpus(corpus, best_pair):
+>     """Step 2: Update the corpus by replacing every adjacent best_pair with its merged token."""
+>     new_corpus = {}
+>     merged_token = best_pair[0] + best_pair[1]   # e.g., "e" + "s" -> "es"
+>
+>     for word, count in corpus.items():
+>         new_word = []
+>         i = 0
+>         while i < len(word):
+>             # If current token and next token match best_pair, merge them and skip 2 positions!
+>             if i < len(word) - 1 and (word[i], word[i + 1]) == best_pair:
+>                 new_word.append(merged_token)
+>                 i += 2                           # Jump past both merged symbols
+>             else:
+>                 new_word.append(word[i])
+>                 i += 1                           # Move 1 position forward
+>         new_corpus[tuple(new_word)] = count
+>
+>     return new_corpus
+>
+> # Run 4 BPE Merge Iterations:
+> for step in range(1, 5):
+>     pair_freqs = get_pair_frequencies(corpus)
+>     best_pair = max(pair_freqs, key=pair_freqs.get)
+>     corpus = merge_pair_in_corpus(corpus, best_pair)
+>     print(f"Step {step}: merged {best_pair} (freq={pair_freqs[best_pair]}) -> {corpus}")
+> ```
+>
+> **How the pointer `i` updates `("n", "e", "w", "e", "s", "t")` when `best_pair = ("e", "s")`:**
+> ```
+>   Index i:      0     1     2     3     4     5
+>   Old word:   ["n",  "e",  "w",  "e",  "s",  "t"]
+>                 │     │     │     └──┬──┘     │
+>                 ▼     ▼     ▼        ▼        ▼
+>              i=0→1 i=1→2 i=2→3  Match ("e","s")!  i=5→6
+>                                 Append "es",
+>                                 jump i from 3 to 5!
+>   New word:   ("n",  "e",  "w",    "es",     "t")   (Length shrinks from 6 to 5)
+> ```
 > [!WARNING]
 > **Why do we only merge ONE pair at a time?**
 > Even if multiple pairs have a high frequency (like `(e, s)` and `(s, t)` both having 9), we **cannot** merge them all at once. BPE is strictly a greedy algorithm. Merging changes the underlying text! If we tried to merge `(e, s)` and `(s, t)` simultaneously, they would overlap on the letter `s`. We must pick the single highest pair, merge it, update our entire corpus with the new token, and *then* recount the frequencies from scratch for the next iteration.

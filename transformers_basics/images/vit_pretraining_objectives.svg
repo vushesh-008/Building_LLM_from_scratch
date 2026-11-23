@@ -1,31 +1,59 @@
-<svg width="100%" viewBox="0 0 680 230" role="img" style="" xmlns="http://www.w3.org/2000/svg">
-<title style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Three pretraining objectives for vision transformers</title>
-<desc style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Classification pretraining uses cross-entropy on a CLS token against ImageNet labels. Contrastive pretraining like CLIP uses InfoNCE loss matching images to captions. Masked autoencoder pretraining reconstructs masked patch pixels with mean squared error, without needing any labels.</desc>
+<svg width="100%" viewBox="0 0 780 240" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Four Pretraining Objectives for Vision Transformers (ViT)</title>
+  <desc>Four major pretraining paradigms for Vision Transformers: (1) Supervised Classification with Cross-Entropy on CLS, (2) Multimodal Contrastive CLIP/SigLIP with InfoNCE or Sigmoid BCE, (3) Masked Autoencoder MAE reconstructing 75% masked patches with Pixel MSE, and (4) Self-Distillation DINOv2 matching Student local crops to EMA Teacher global crops with Cross-Entropy.</desc>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-<rect x="30" y="50" width="190" height="150" rx="8" stroke-width="0.5" style="fill:rgb(230, 241, 251);stroke:rgb(24, 95, 165);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="125" y="80" text-anchor="middle" style="fill:rgb(12, 68, 124);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:auto">Classification</text>
-<text x="125" y="105" text-anchor="middle" style="fill:rgb(24, 95, 165);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">original ViT</text>
-<text x="125" y="130" text-anchor="middle" style="fill:rgb(24, 95, 165);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">CLS token →</text>
-<text x="125" y="148" text-anchor="middle" style="fill:rgb(24, 95, 165);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">predict ImageNet label</text>
-<text x="125" y="178" text-anchor="middle" style="fill:rgb(12, 68, 124);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:auto">CE over classes</text>
-</g>
+  <rect width="780" height="240" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="390" y="26" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1e293b">Visual Encoder (ViT) Pre-Training Paradigms &amp; Loss Functions</text>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-<rect x="245" y="50" width="190" height="150" rx="8" stroke-width="0.5" style="fill:rgb(250, 236, 231);stroke:rgb(153, 60, 29);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="340" y="80" text-anchor="middle" style="fill:rgb(113, 43, 19);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:auto">Contrastive</text>
-<text x="340" y="105" text-anchor="middle" style="fill:rgb(153, 60, 29);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">CLIP / SigLIP</text>
-<text x="340" y="130" text-anchor="middle" style="fill:rgb(153, 60, 29);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">image ↔ caption</text>
-<text x="340" y="148" text-anchor="middle" style="fill:rgb(153, 60, 29);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">similarity matrix</text>
-<text x="340" y="178" text-anchor="middle" style="fill:rgb(113, 43, 19);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:auto">InfoNCE / sigmoid</text>
-</g>
+  <!-- Card 1: Classification -->
+  <g>
+    <rect x="16" y="44" width="175" height="178" rx="8" fill="#e6f1fb" stroke="#185fa5" stroke-width="1"/>
+    <text x="103" y="68" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="13" font-weight="700" fill="#0c447c">1. Classification</text>
+    <text x="103" y="86" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" fill="#185fa5">Original ViT</text>
+    <line x1="32" y1="96" x2="175" y2="96" stroke="#93c5fd" stroke-width="1"/>
+    <text x="103" y="116" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" fill="#1e3a8a">Image → [CLS] vector</text>
+    <text x="103" y="134" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" fill="#1e3a8a">→ Linear(d → C classes)</text>
+    <text x="103" y="154" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#475569">Needs ImageNet-21k labels</text>
+    <rect x="28" y="172" width="151" height="36" rx="5" fill="#1e3a8a"/>
+    <text x="103" y="194" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="#ffffff">Loss: Class CE</text>
+  </g>
 
-<g style="fill:rgb(0, 0, 0);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
-<rect x="460" y="50" width="190" height="150" rx="8" stroke-width="0.5" style="fill:rgb(225, 245, 238);stroke:rgb(15, 110, 86);color:rgb(11, 11, 11);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-<text x="555" y="80" text-anchor="middle" style="fill:rgb(8, 80, 65);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:auto">Masked reconstruction</text>
-<text x="555" y="105" text-anchor="middle" style="fill:rgb(15, 110, 86);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">MAE</text>
-<text x="555" y="130" text-anchor="middle" style="fill:rgb(15, 110, 86);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">mask 75% of patches,</text>
-<text x="555" y="148" text-anchor="middle" style="fill:rgb(15, 110, 86);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:12px;font-weight:400;text-anchor:middle;dominant-baseline:auto">predict raw pixels</text>
-<text x="555" y="178" text-anchor="middle" style="fill:rgb(8, 80, 65);stroke:none;color:rgb(11, 11, 11);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:anthropic-sans, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:14px;font-weight:500;text-anchor:middle;dominant-baseline:auto">MSE on masked patches</text>
-</g>
+  <!-- Card 2: Contrastive (CLIP / SigLIP) -->
+  <g>
+    <rect x="207" y="44" width="175" height="178" rx="8" fill="#faece7" stroke="#993c1d" stroke-width="1"/>
+    <text x="294" y="68" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="13" font-weight="700" fill="#712b13">2. Contrastive</text>
+    <text x="294" y="86" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" fill="#993c1d">CLIP / SigLIP</text>
+    <line x1="223" y1="96" x2="366" y2="96" stroke="#fdba74" stroke-width="1"/>
+    <text x="294" y="116" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" fill="#7c2d12">Image ↔ Text Caption</text>
+    <text x="294" y="134" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" fill="#7c2d12">N × N cosine sim matrix</text>
+    <text x="294" y="154" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#475569">Aligns vision to language</text>
+    <rect x="219" y="172" width="151" height="36" rx="5" fill="#7c2d12"/>
+    <text x="294" y="194" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="#ffffff">InfoNCE / Sigmoid BCE</text>
+  </g>
+
+  <!-- Card 3: Masked Autoencoder (MAE) -->
+  <g>
+    <rect x="398" y="44" width="175" height="178" rx="8" fill="#e1f5ee" stroke="#0f6e56" stroke-width="1"/>
+    <text x="485" y="68" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="13" font-weight="700" fill="#085041">3. Masked Recon.</text>
+    <text x="485" y="86" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" fill="#0f6e56">MAE ("Vision BERT")</text>
+    <line x1="414" y1="96" x2="557" y2="96" stroke="#6ee7b7" stroke-width="1"/>
+    <text x="485" y="116" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" fill="#064e3b">Mask 75% of patches</text>
+    <text x="485" y="134" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" fill="#064e3b">Encode 25% → decode RGB</text>
+    <text x="485" y="154" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#475569">100% self-supervised</text>
+    <rect x="410" y="172" width="151" height="36" rx="5" fill="#065f46"/>
+    <text x="485" y="194" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="#ffffff">Pixel MSE (masked)</text>
+  </g>
+
+  <!-- Card 4: Self-Distillation (DINOv2) -->
+  <g>
+    <rect x="589" y="44" width="175" height="178" rx="8" fill="#f3e8ff" stroke="#6b21a8" stroke-width="1"/>
+    <text x="676" y="68" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="13" font-weight="700" fill="#4c1d95">4. Self-Distillation</text>
+    <text x="676" y="86" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" fill="#6b21a8">DINO / DINOv2</text>
+    <line x1="605" y1="96" x2="748" y2="96" stroke="#d8b4fe" stroke-width="1"/>
+    <text x="676" y="116" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" fill="#3b0764">EMA Teacher (global crop)</text>
+    <text x="676" y="134" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" fill="#3b0764">↔ Student (local crop)</text>
+    <text x="676" y="154" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#475569">Dense 3D/part features</text>
+    <rect x="601" y="172" width="151" height="36" rx="5" fill="#4c1d95"/>
+    <text x="676" y="194" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="#ffffff">Teacher-Student CE</text>
+  </g>
 </svg>

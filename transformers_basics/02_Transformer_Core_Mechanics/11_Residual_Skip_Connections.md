@@ -1,4 +1,4 @@
-## 8. Residual Skip Connections
+## 10. Residual Skip Connections
 
 Every sublayer (attention or FFN) has a **bypass wire** that carries the input around it completely untouched. The output is the sublayer's result added back to that original input:
 
@@ -6,7 +6,7 @@ $$\text{block output} = \text{LayerNorm}(X + \text{Sublayer}(X))$$
 
 The $X$ in that formula traveled around `Sublayer` unchanged — that is the skip connection.
 
-![Explicit residual skip connections around each sublayer](images/residual_skip_connection_explicit.svg)
+![Explicit residual skip connections around each sublayer](../images/residual_skip_connection_explicit.svg)
 
 ### What "Add & Norm" means in diagrams
 

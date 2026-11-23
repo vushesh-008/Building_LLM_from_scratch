@@ -80,7 +80,7 @@ Where $d(x, y) = \|f(x) - f(y)\|^2$ is the Euclidean distance in embedding space
 ```
   Before Training:                   After Training:
   
-     A · · · · · N                     A  P ──────── margin α ────────► N
+     A · · · · · N                     A  P ──────── margin α ───► N
          P                             
   (Random positions)                   (Positive pulled tight, Negative pushed past margin)
 ```

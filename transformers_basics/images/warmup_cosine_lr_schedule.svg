@@ -1,0 +1,57 @@
+<svg width="100%" viewBox="0 0 760 300" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Linear Warmup + Cosine Annealing Learning Rate Schedule</title>
+  <desc>Graph showing the standard Transformer learning rate schedule: phase 1 is linear warmup from 0 to peak learning rate alpha_max over the first 2-5% of training steps, and phase 2 is smooth cosine annealing decay down to alpha_min.</desc>
+
+  <rect width="760" height="300" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="380" y="26" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1e293b">Modern LLM Learning Rate Schedule: Linear Warmup + Cosine Annealing</text>
+
+  <!-- Plot Area Background -->
+  <rect x="80" y="46" width="630" height="200" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+
+  <!-- Shaded Warmup Region -->
+  <rect x="80" y="46" width="95" height="200" fill="#fef3c7" opacity="0.55"/>
+  <line x1="175" y1="46" x2="175" y2="246" stroke="#d97706" stroke-width="1.2" stroke-dasharray="4,3"/>
+
+  <!-- Grid lines -->
+  <line x1="80" y1="72" x2="710" y2="72" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="80" y1="224" x2="710" y2="224" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- Axis Labels -->
+  <text x="72" y="76" text-anchor="end" font-family="monospace" font-size="11" font-weight="700" fill="#1e3a8a">α_max</text>
+  <text x="72" y="90" text-anchor="end" font-family="monospace" font-size="9.5" fill="#64748b">(e.g. 3e-4)</text>
+
+  <text x="72" y="228" text-anchor="end" font-family="monospace" font-size="11" font-weight="700" fill="#0f766e">α_min</text>
+  <text x="72" y="241" text-anchor="end" font-family="monospace" font-size="9.5" fill="#64748b">(0.1 × α_max)</text>
+
+  <text x="72" y="252" text-anchor="end" font-family="monospace" font-size="11" fill="#64748b">0</text>
+
+  <!-- X-axis ticks -->
+  <text x="80" y="264" text-anchor="middle" font-family="monospace" font-size="10.5" fill="#475569">Step 0</text>
+  <text x="175" y="264" text-anchor="middle" font-family="monospace" font-size="10.5" font-weight="700" fill="#b45309">T_warmup (~3%)</text>
+  <text x="440" y="264" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" fill="#334155">Training Steps (t) →</text>
+  <text x="710" y="264" text-anchor="middle" font-family="monospace" font-size="10.5" fill="#475569">T_max (100%)</text>
+
+  <!-- Step Decay comparison (dashed grey) -->
+  <path d="M 175 72 L 340 72 L 340 130 L 520 130 L 520 185 L 710 185" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <text x="430" y="122" font-family="-apple-system, sans-serif" font-size="10" fill="#64748b">Old Step Decay</text>
+
+  <!-- Linear Warmup Line (Step 0 -> T_warmup) -->
+  <line x1="80" y1="246" x2="175" y2="72" stroke="#d97706" stroke-width="3"/>
+
+  <!-- Cosine Annealing Curve (T_warmup -> T_max) -->
+  <path d="M 175 72 C 310 72, 370 148, 442 148 C 515 148, 575 224, 710 224" fill="none" stroke="#2563eb" stroke-width="3"/>
+
+  <!-- Peak dot -->
+  <circle cx="175" cy="72" r="4.5" fill="#d97706" stroke="#ffffff" stroke-width="1.5"/>
+  <circle cx="710" cy="224" r="4.5" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
+
+  <!-- Annotations -->
+  <text x="127" y="62" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="700" fill="#b45309">1. Linear Warmup</text>
+  <text x="127" y="182" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9.5" fill="#92400e">Prevents early</text>
+  <text x="127" y="195" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9.5" fill="#92400e">Adam v̂_t spike</text>
+
+  <text x="460" y="64" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="700" fill="#1e3a8a">2. Cosine Annealing Decay</text>
+  <text x="460" y="80" text-anchor="middle" font-family="monospace" font-size="10.5" fill="#2563eb">α_t = α_min + 0.5·(α_max - α_min)·(1 + cos(π · progress))</text>
+
+  <text x="380" y="286" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#475569">Warmup lets Adam's 2nd moment (v_t) calibrate before full step sizes; Cosine decay gently settles into flat minima.</text>
+</svg>

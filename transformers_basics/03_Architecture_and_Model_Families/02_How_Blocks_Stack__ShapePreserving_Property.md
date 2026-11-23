@@ -6,7 +6,7 @@ $$[N_{seq} \times d_{model}] \xrightarrow{\text{Block}} [N_{seq} \times d_{model
 
 Same shape in, same shape out. Block 2 cannot tell whether its input came from raw embeddings or from 50 prior blocks — it just sees a matrix of the right shape and refines it.
 
-![Shape-preserving residual stream through stacked transformer blocks](images/residual_stream_shape_preserving.svg)
+![Shape-preserving residual stream through stacked transformer blocks](../images/residual_stream_shape_preserving.svg)
 
 ```
   Embeddings  [Seq × 512]
@@ -22,7 +22,7 @@ Same shape in, same shape out. Block 2 cannot tell whether its input came from r
   Output      [Seq × 512]
 ```
 
-![Sequential transformer block stacking](images/sequential_block_stack_vertical.svg)
+![Sequential transformer block stacking](../images/sequential_block_stack_vertical.svg)
 
 The tensor gets **refined**, never reshaped. Empirically: early blocks capture local patterns and syntax; later blocks capture long-range semantics and reasoning. The architecture doesn't enforce this — it emerges from training.
 

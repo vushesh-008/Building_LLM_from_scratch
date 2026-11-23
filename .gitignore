@@ -17,3 +17,7 @@ checkpoints/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# macOS & Obsidian local workspace state
+.DS_Store
+.obsidian/workspace*.json

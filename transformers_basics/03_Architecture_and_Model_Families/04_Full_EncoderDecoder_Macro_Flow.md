@@ -1,6 +1,6 @@
 ## 3. Full Encoder-Decoder Macro Flow
 
-![Full encoder-decoder macro flow with cross-attention fanning to every decoder block](images/encoder_decoder_macro_flow_full.svg)
+![Full encoder-decoder macro flow with cross-attention fanning to every decoder block](../images/encoder_decoder_macro_flow_full.svg)
 
 The purple bus line in the diagram is the detail most often missed: the final encoder output is **computed once** after all encoder blocks finish, then **broadcast identically** to the cross-attention sublayer of every decoder block.
 
