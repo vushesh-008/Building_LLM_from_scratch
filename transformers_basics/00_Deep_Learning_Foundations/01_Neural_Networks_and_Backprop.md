@@ -82,6 +82,8 @@ In a neural network with billions of parameters, this backward pass is incredibl
 ### The Limitation of standard ANNs
 This basic Feed-Forward architecture is incredibly powerful, but it has one fatal flaw when it comes to language: **It requires a fixed-size input.** 
 
+![Standard ANN Fixed Input Structure](../images/ann_fixed_input_structure.svg)
+
 If your network is built with 784 input neurons, it can *only* accept 784 numbers. But language is variable. Sentences can be 3 words long or 3,000 words long. 
 
 To process language, we had to invent new architectures that could handle sequences over time (which we will cover in Phase 1). But first, let's look at how we tune these networks to prevent them from breaking during training.

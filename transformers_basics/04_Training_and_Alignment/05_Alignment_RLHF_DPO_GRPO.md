@@ -93,8 +93,10 @@ GRPO (popularised by DeepSeek-R1) is designed for **reasoning tasks** where resp
 
 | Method | Data needed | Reward model? | Key use case |
 |---|---|---|---|
-| SFT | (prompt, response) pairs | No | Instruction following |
+| Classification SFT | (text, class_label) pairs | No | Specialist classification (spam, sentiment) |
+| Instruction SFT | (instruction, response) pairs | No | General instruction following |
 | LoRA / QLoRA | Same as SFT | No | Memory-efficient fine-tuning |
 | RLHF (PPO) | Human preference rankings | Yes (trained) | General alignment |
 | DPO | (prompt, chosen, rejected) | No (implicit) | Simpler alignment, offline |
 | GRPO | Prompts + verifiable rewards | No (rule-based) | Reasoning, math, code |
+

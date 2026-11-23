@@ -1,0 +1,63 @@
+<svg width="100%" viewBox="0 0 780 265" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Four Positional Encoding Strategies in Transformers Compared</title>
+  <desc>Four-card comparison of Positional Encoding families: (1) Learned Absolute PE (GPT-2, BERT) adding a trainable position table at input, (2) Sinusoidal PE (2017 Transformer) adding fixed sin/cos waves at input, (3) ALiBi (BLOOM, MPT) subtracting linear distance penalty -m|i-j| from QK^T attention scores, and (4) RoPE (LLaMA, Qwen, Gemma) rotating Q and K 2D pairs by angle m*theta inside every attention layer.</desc>
+
+  <rect width="780" height="265" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="390" y="26" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#1e293b">Evolution of Positional Encodings: Where Position Enters the Transformer</text>
+
+  <!-- Card 1: Learned Absolute PE -->
+  <g>
+    <rect x="16" y="44" width="175" height="202" rx="8" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/>
+    <rect x="16" y="44" width="175" height="32" rx="8" fill="#f1f5f9"/>
+    <text x="103" y="64" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" font-weight="700" fill="#1e293b">1. Learned Absolute</text>
+    <text x="103" y="92" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" font-weight="600" fill="#475569">GPT-2, GPT-3, BERT, ViT</text>
+    <text x="103" y="114" text-anchor="middle" font-family="monospace" font-size="10.5" font-weight="700" fill="#0f172a">x = tok_emb + pos_emb[m]</text>
+    <text x="103" y="136" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#334155">Where: Added once at input</text>
+    <text x="103" y="154" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#334155">Table: [max_len × d_model]</text>
+    <text x="103" y="176" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" fill="#b91c1c">✗ Hard wall at max_len</text>
+    <text x="103" y="192" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" fill="#b91c1c">(Cannot extrapolate past</text>
+    <text x="103" y="206" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" fill="#b91c1c">trained context length)</text>
+  </g>
+
+  <!-- Card 2: Sinusoidal PE -->
+  <g>
+    <rect x="207" y="44" width="175" height="202" rx="8" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2"/>
+    <rect x="207" y="44" width="175" height="32" rx="8" fill="#dbeafe"/>
+    <text x="294" y="64" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" font-weight="700" fill="#1e3a8a">2. Sinusoidal Fixed</text>
+    <text x="294" y="92" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" font-weight="600" fill="#1d4ed8">Original 2017 Transformer</text>
+    <text x="294" y="114" text-anchor="middle" font-family="monospace" font-size="10.5" font-weight="700" fill="#1e3a8a">x = tok_emb + [sin, cos]</text>
+    <text x="294" y="136" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#334155">Where: Added once at input</text>
+    <text x="294" y="154" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#334155">0 trainable parameters</text>
+    <text x="294" y="176" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" fill="#b45309">~ Dot product PE_m · PE_n</text>
+    <text x="294" y="192" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" fill="#b45309">depends on (m - n), but gets</text>
+    <text x="294" y="206" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" fill="#b45309">blurred by W_Q, W_K matrices</text>
+  </g>
+
+  <!-- Card 3: ALiBi -->
+  <g>
+    <rect x="398" y="44" width="175" height="202" rx="8" fill="#ffffff" stroke="#d97706" stroke-width="1.2"/>
+    <rect x="398" y="44" width="175" height="32" rx="8" fill="#fef3c7"/>
+    <text x="485" y="64" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" font-weight="700" fill="#92400e">3. ALiBi (Score Bias)</text>
+    <text x="485" y="92" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" font-weight="600" fill="#b45309">BLOOM (176B), MPT</text>
+    <text x="485" y="114" text-anchor="middle" font-family="monospace" font-size="10.5" font-weight="700" fill="#92400e">S_ij = q_i·k_j/√d - m·|i-j|</text>
+    <text x="485" y="136" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#334155">Where: Added to QKᵀ matrix</text>
+    <text x="485" y="154" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#334155">Nothing added to embeddings!</text>
+    <text x="485" y="176" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" fill="#047857">✓ Linear distance decay</text>
+    <text x="485" y="192" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" fill="#047857">✓ Strong length extrapolation</text>
+    <text x="485" y="206" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" fill="#64748b">(Fixed head slopes 1/2^h)</text>
+  </g>
+
+  <!-- Card 4: RoPE -->
+  <g>
+    <rect x="589" y="44" width="175" height="202" rx="8" fill="#ffffff" stroke="#059669" stroke-width="1.8"/>
+    <rect x="589" y="44" width="175" height="32" rx="8" fill="#d1fae5"/>
+    <text x="676" y="64" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" font-weight="700" fill="#065f46">4. RoPE ( Modern Default)</text>
+    <text x="676" y="92" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" font-weight="600" fill="#047857">LLaMA, Qwen, Mistral, Gemma</text>
+    <text x="676" y="114" text-anchor="middle" font-family="monospace" font-size="10.5" font-weight="700" fill="#065f46">q̃_m = R(mθ)q_m, k̃_n = R(nθ)k_n</text>
+    <text x="676" y="136" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#334155">Where: Rotates Q &amp; K at</text>
+    <text x="676" y="154" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10.5" fill="#334155">EVERY attention layer</text>
+    <text x="676" y="176" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" font-weight="600" fill="#047857">✓ Exact relative (n-m) angle</text>
+    <text x="676" y="192" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" font-weight="600" fill="#047857">✓ Preserves vector norm ||q||</text>
+    <text x="676" y="206" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="10" fill="#047857">✓ Scales to 128k+ (YaRN)</text>
+  </g>
+</svg>

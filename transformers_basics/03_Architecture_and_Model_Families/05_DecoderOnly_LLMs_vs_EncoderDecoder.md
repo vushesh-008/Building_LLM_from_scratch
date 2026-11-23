@@ -2,7 +2,7 @@
 
 When you read "GPT", "LLaMA", "Mistral", "Claude" — there is **no encoder stack** and **no cross-attention sublayer** anywhere. Each block has 2 sublayers, not 3.
 
-![Decoder-only LLM block versus the original encoder-decoder decoder block](images/decoder_only_vs_encoder_decoder_block.svg)
+![Decoder-only LLM block versus the original encoder-decoder decoder block](../images/decoder_only_vs_encoder_decoder_block.svg)
 
 | | Original decoder block | LLM decoder-only block |
 |---|---|---|

@@ -1,4 +1,4 @@
-## 11. RoPE — Rotary Positional Embeddings
+## 13. RoPE — Rotary Positional Embeddings
 
 > **Default choice in modern LLMs:** LLaMA, Mistral, Gemma, GPT-NeoX
 
@@ -24,7 +24,7 @@ $$R(m\theta) = \begin{pmatrix} \cos(m\theta) & -\sin(m\theta) \\ \sin(m\theta) &
 
 The vector's **magnitude never changes** — only its direction shifts. This matters: rotation preserves the token's content signal, it only stamps "where."
 
-![RoPE rotates a 2D dimension pair by an angle proportional to position](images/rope_single_pair_rotation.svg)
+![RoPE rotates a 2D dimension pair by an angle proportional to position](../images/rope_single_pair_rotation.svg)
 
 > Each coloured arrow is the **same vector**, just spun by a larger angle. Position is encoded as direction, not added noise.
 
@@ -42,7 +42,7 @@ $$\theta_i = \text{base}^{-2i/d} \qquad \text{base} = 10{,}000$$
 | 15 (dims 30–31) | medium | moderate | minute hand |
 | 31 (dims 62–63) | tiny | extremely slow | hour hand |
 
-![Different dimension pairs rotate at different frequencies](images/rope_multi_frequency_pairs.svg)
+![Different dimension pairs rotate at different frequencies](../images/rope_multi_frequency_pairs.svg)
 
 **Why multiple frequencies?**
 
@@ -68,7 +68,7 @@ $$\tilde{q}_m \cdot \tilde{k}_n^\top = q_m \cdot R(\theta m)^\top R(\theta n) \c
 
 The absolute positions $m$ and $n$ cancel — only the **relative distance** $(n-m)$ survives in the dot product.
 
-![Same relative offset produces the same angle regardless of absolute position](images/rope_relative_position_invariance.svg)
+![Same relative offset produces the same angle regardless of absolute position](../images/rope_relative_position_invariance.svg)
 
 Both pairs in the diagram (positions 3 & 7, and positions 0 & 4) have offset 4 and both produce $\Delta = 80°$ between their rotated vectors. Different absolute positions, identical relative signal — the model can never tell whether it's looking at tokens (0, 4) or (3, 7), only that they are 4 apart.
 

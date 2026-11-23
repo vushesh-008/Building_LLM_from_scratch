@@ -1,6 +1,8 @@
-## 9. Layer Normalisation
+## 11. Layer Normalisation & RMSNorm
 
-Layer Norm rescales each token's representation to have zero mean and unit variance, then applies learned scale $\delta$ and shift $\beta$:
+Layer Norm rescales each token's representation to have zero mean and unit variance, then applies learned scale $\delta$ (often written $\gamma$) and shift $\beta$:
+
+![Normalization in Transformers: BatchNorm vs LayerNorm vs RMSNorm](../images/layernorm_vs_batchnorm_vs_rmsnorm.svg)
 
 $$LN(x) = \delta \cdot \hat{x} + \beta \qquad \hat{x} = \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}}$$
 
@@ -62,8 +64,15 @@ $$\hat{x} = \left[\frac{-1.5}{1.118},\ \frac{-0.5}{1.118},\ \frac{0.5}{1.118},\ 
 
 ### RMS Norm
 
-$$\text{RMSNorm}(x) = \delta \cdot \frac{x}{\text{RMS}(x)} \qquad \text{RMS}(x) = \sqrt{\frac{1}{d}\sum_{i=1}^{d} x_i^2}$$
+$$\text{RMSNorm}(x) = \delta \cdot \frac{x}{\text{RMS}(x)} \qquad \text{RMS}(x) = \sqrt{\frac{1}{d}\sum_{i=1}^{d} x_i^2 + \epsilon}$$
 
-Drops the mean-subtraction step entirely — faster to compute, no measurable quality loss. Modern default alongside Pre-Norm.
+Drops the mean-subtraction step ($\mu$) and shift parameter ($\beta$) entirely — faster to compute (only 1 pass over the vector instead of 2), with no measurable quality loss. Modern default alongside Pre-Norm.
+
+#### Worked Example — RMSNorm on the Same Token `[1.0, 2.0, 3.0, 4.0]` (with $\delta = 1$)
+$$\text{RMS}(x) = \sqrt{\frac{1^2 + 2^2 + 3^2 + 4^2}{4}} = \sqrt{\frac{1 + 4 + 9 + 16}{4}} = \sqrt{7.5} \approx 2.7386$$
+
+$$\text{RMSNorm}(x) = \left[\frac{1.0}{2.7386},\ \frac{2.0}{2.7386},\ \frac{3.0}{2.7386},\ \frac{4.0}{2.7386}\right] = [0.365,\ 0.730,\ 1.095,\ 1.461]$$
+
+*(Notice: unlike LayerNorm's `[-1.34, -0.45, 0.45, 1.34]`, RMSNorm preserves the original signs and ratios of `[1, 2, 3, 4]` while constraining the vector's root-mean-square magnitude to `1.0`!)*
 
 ---

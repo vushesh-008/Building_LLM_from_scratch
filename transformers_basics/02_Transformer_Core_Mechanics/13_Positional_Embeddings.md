@@ -1,14 +1,36 @@
-## 10. Positional Embeddings
+## 12. Positional Embeddings (Learned Absolute, Sinusoidal, and ALiBi)
 
 ### Why needed?
 
 Self-attention is **permutation-invariant** (shown in §4). Feed it tokens in any order and it returns the same outputs, just reordered. It has no built-in sense of which token came first. Positional embeddings inject order information.
 
+![Evolution of Positional Encodings: Learned Absolute vs Sinusoidal vs ALiBi vs RoPE](../images/positional_encoding_comparison.svg)
+
 $$v_i^* = v_i + p_i$$
 
 The positional vector $p_i$ is added to each token embedding before the first block. After that addition, the model can distinguish tokens by position.
 
-### Sinusoidal — Original Transformer (2017)
+### 1. Learned Absolute Positional Embeddings — GPT-2, GPT-3, BERT, ViT (Raschka Ch. 2 & 4)
+
+The simplest approach (used in GPT-2 and BERT) is to create a **second trainable `nn.Embedding(context_length, d_model)` lookup table** dedicated purely to positions `0, 1, ..., context_length - 1`:
+
+```python
+# GPT-2 setup (context_length = 1024, d_model = 768):
+tok_emb_layer = nn.Embedding(vocab_size, d_model)       # Shape: [50257, 768]
+pos_emb_layer = nn.Embedding(context_length, d_model)   # Shape: [1024,  768]
+
+# Forward pass for an input batch of shape [batch_size, seq_len]:
+tok_embeds = tok_emb_layer(token_ids)                   # [B, seq_len, 768]
+pos_embeds = pos_emb_layer(torch.arange(seq_len))       # [seq_len, 768]
+x = tok_embeds + pos_embeds                             # Broadcasts across batch B!
+```
+
+- **How it learns:** Row $m$ of `pos_emb_layer` starts as random noise and is updated via backpropagation so the model learns what "being at position $m$" means.
+- **The Fatal Limitation:** If `context_length = 1024`, the table only has rows `0 .. 1023`. You **cannot** feed a 1,025-token prompt at inference time because row `1024` does not exist (`IndexError`), and even if you enlarged the table, positions $>1023$ were never trained!
+
+---
+
+### 2. Sinusoidal — Original Transformer (2017)
 
 $$PE_{m,2i} = \sin\!\left(\frac{m}{10000^{\,2i/d_{model}}}\right) \qquad PE_{m,2i+1} = \cos\!\left(\frac{m}{10000^{\,2i/d_{model}}}\right)$$
 

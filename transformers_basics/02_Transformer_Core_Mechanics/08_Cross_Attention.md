@@ -1,4 +1,4 @@
-## 8. Cross-Attention (Encoder-Decoder Attention)
+## 7. Cross-Attention (Encoder-Decoder Attention)
 
 We have extensively covered **Self-Attention**, where the Queries, Keys, and Values all come from the *same* sequence.
 
@@ -45,11 +45,16 @@ flowchart TD
     V --> OUT
 ```
 
-### The Math is Exactly the Same
+### The Math is Exactly the Same (With Rectangular Score Matrices!)
 The beautiful part about Cross-Attention is that the math doesn't change at all:
-$$\text{Attention}(Q, K_{enc}, V_{enc}) = \text{softmax}\!\left(\frac{Q K_{enc}^\top}{\sqrt{d_k}}\right) V_{enc}$$
+$$\text{Attention}(Q_{\text{dec}}, K_{\text{enc}}, V_{\text{enc}}) = \text{softmax}\!\left(\frac{Q_{\text{dec}} K_{\text{enc}}^\top}{\sqrt{d_k}}\right) V_{\text{enc}}$$
 
-The only difference is the *source* of the inputs. 
+The only difference is the *source* (and sequence length!) of the inputs:
+- Suppose the Decoder sequence has $N_{\text{dec}} = 2$ tokens (`"The black"`) and the Encoder sequence has $N_{\text{enc}} = 3$ tokens (`"Le chat noir"`):
+  - $Q_{\text{dec}} \in \mathbb{R}^{N_{\text{dec}} \times d_k}$ (`[2 × 64]`)
+  - $K_{\text{enc}}, V_{\text{enc}} \in \mathbb{R}^{N_{\text{enc}} \times d_k}$ (`[3 × 64]`)
+  - **Attention Score Matrix $Q_{\text{dec}} K_{\text{enc}}^\top$:** shape is **`[N_dec × N_enc]` (`[2 × 3]`)** — a rectangular matrix where each English decoder token attends across all 3 French encoder tokens!
+  - **Output $A \cdot V_{\text{enc}}$:** `[2 × 3] · [3 × 64] = [2 × 64]` (matches the Decoder's sequence length $N_{\text{dec}}$). 
 
 ### Does it use a Mask?
 **No.** Unlike the Decoder's self-attention (which must be causally masked so it doesn't cheat by looking at future English words), Cross-Attention does not need a mask. 
